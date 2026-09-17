@@ -1,8 +1,9 @@
 use std::io;
 mod widgets;
 mod app;
-mod events;
+mod enums;
 use app::App;
+mod audio;
 
 fn main() -> io::Result<()> {
     let mut terminal = ratatui::init();

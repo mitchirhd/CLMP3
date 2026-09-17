@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     io,
+    rc::Rc,
     sync::mpsc::{self, Receiver},
     thread,
 };
@@ -8,8 +9,8 @@ use std::{
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::DefaultTerminal;
 
-use crate::events::CLMP3Event;
-use crate::widgets::main_widget::MainWidget;
+use crate::{audio::AudioPlayer, enums::CLMP3Event};
+use crate::{enums::CLMP3Widgets, widgets::main_widget::MainWidget};
 
 fn handle_input_events(tx: mpsc::Sender<CLMP3Event>) {
     loop {
@@ -27,31 +28,57 @@ fn handle_input_events(tx: mpsc::Sender<CLMP3Event>) {
 pub struct App {
     exit: bool,
     main_widget: MainWidget,
-    handler_map: HashMap<(KeyEventKind, KeyModifiers, KeyCode), fn(&mut App) -> io::Result<()>>,
+    handler_map:
+        HashMap<(KeyEventKind, KeyModifiers, KeyCode), Rc<dyn Fn(&mut App) -> io::Result<()>>>,
+    audio_player: AudioPlayer,
 }
 
 impl App {
     pub fn new() -> App {
+        let (audio_player, player_controls) = AudioPlayer::new();
         App {
             exit: false,
-            main_widget: MainWidget::new(),
+            main_widget: MainWidget::new(player_controls),
             handler_map: App::get_handler_map(),
+            audio_player,
         }
     }
 
     fn get_handler_map()
-    -> HashMap<(KeyEventKind, KeyModifiers, KeyCode), fn(&mut App) -> io::Result<()>> {
+    -> HashMap<(KeyEventKind, KeyModifiers, KeyCode), Rc<dyn Fn(&mut App) -> io::Result<()>>> {
         let mut map: HashMap<
             (KeyEventKind, KeyModifiers, KeyCode),
-            fn(&mut App) -> io::Result<()>,
+            Rc<dyn Fn(&mut App) -> io::Result<()>>,
         > = HashMap::new();
 
         map.insert(
             (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Char('q')),
-            |app: &mut App| {
-                app.exit = true;
-                Ok(())
-            },
+            Rc::new(App::exit_app),
+        );
+
+        map.insert(
+            (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Char('p')),
+            Rc::new(|app| App::set_selected_widget(app, CLMP3Widgets::Player)),
+        );
+
+        map.insert(
+            (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Char('d')),
+            Rc::new(|app| App::set_selected_widget(app, CLMP3Widgets::Display)),
+        );
+
+        map.insert(
+            (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Char('l')),
+            Rc::new(|app| App::set_selected_widget(app, CLMP3Widgets::Load)),
+        );
+
+        map.insert(
+            (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Char('q')),
+            Rc::new(|app| App::set_selected_widget(app, CLMP3Widgets::Queue)),
+        );
+
+        map.insert(
+            (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Char(' ')),
+            Rc::new(App::start_stop),
         );
 
         map
@@ -64,7 +91,7 @@ impl App {
             handle_input_events(event_tx.clone());
         });
 
-        self.draw(terminal)?;
+        self.main_widget.draw(terminal)?;
 
         self.run(terminal, event_rx)
     }
@@ -80,7 +107,7 @@ impl App {
                 CLMP3Event::MouseInput(mouse_event) => todo!(),
                 CLMP3Event::Resize => {}
             }
-            self.draw(terminal)?;
+            self.main_widget.draw(terminal)?;
         }
 
         Ok(())
@@ -90,14 +117,29 @@ impl App {
         match self
             .handler_map
             .get(&(key_event.kind, key_event.modifiers, key_event.code))
+            .cloned()
         {
             Some(func) => func(self),
             None => Ok(()),
         }
     }
 
-    fn draw(&self, terminal: &mut DefaultTerminal) -> io::Result<()> {
-        terminal.draw(|frame| frame.render_widget(&self.main_widget, frame.area()))?;
+    fn exit_app(app: &mut App) -> io::Result<()> {
+        app.exit = true;
+        Ok(())
+    }
+
+    fn set_selected_widget(app: &mut App, val: CLMP3Widgets) -> io::Result<()> {
+        app.main_widget.set_selected_widget(val);
+        Ok(())
+    }
+
+    fn start_stop(app: &mut App) -> io::Result<()> {
+        if app.audio_player.has_source {
+            app.audio_player.start_stop();
+        } else {
+            app.main_widget.set_is_loading(true);
+        }
         Ok(())
     }
 }

@@ -1,4 +1,4 @@
-use ratatui::{symbols::border, text::Line, widgets::{Block, Widget}};
+use ratatui::widgets::Widget;
 
 pub struct QueueWidget {}
 
@@ -13,10 +13,10 @@ impl Widget for &QueueWidget {
     where
         Self: Sized,
     {
-        let queue_block = Block::bordered()
-            .title(Line::from(" Queue Area "))
-            .border_set(border::THICK);
+        // let queue_block = Block::bordered()
+        //     .title(Line::from(" Queue Area "))
+        //     .border_set(border::THICK);
 
-        queue_block.render(area, buf);
+        // queue_block.render(area, buf);
     }
 }

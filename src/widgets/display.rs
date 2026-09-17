@@ -1,4 +1,4 @@
-use ratatui::{symbols::border, text::Line, widgets::{Block, Widget}};
+use ratatui::widgets::Widget;
 
 pub struct DisplayWidget {}
 
@@ -13,10 +13,10 @@ impl Widget for &DisplayWidget {
     where
         Self: Sized,
     {
-        let display_block = Block::bordered()
-            .title(Line::from(" Display Area "))
-            .border_set(border::THICK);
+        // let display_block = Block::bordered()
+        //     .title(Line::from(" Display Area "))
+        //     .border_set(border::THICK);
 
-        display_block.render(area, buf);
+        // display_block.render(area, buf);
     }
 }
