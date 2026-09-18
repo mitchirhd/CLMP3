@@ -2,15 +2,23 @@ use std::{
     collections::HashMap,
     io,
     rc::Rc,
-    sync::mpsc::{self, Receiver},
+    sync::{
+        Arc,
+        atomic::Ordering,
+        mpsc::{self, Receiver, Sender},
+    },
     thread,
 };
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::DefaultTerminal;
 
-use crate::{audio::AudioPlayer, enums::CLMP3Event};
-use crate::{enums::CLMP3Widgets, widgets::main_widget::MainWidget};
+use crate::{
+    audio::{AudioControls, AudioPlayer},
+    enums::CLMP3Event,
+    widgets::main_widget::RenderSettings,
+};
+use crate::{enums::CLMP3Widget, widgets::main_widget::MainWidget};
 
 fn handle_input_events(tx: mpsc::Sender<CLMP3Event>) {
     loop {
@@ -27,53 +35,63 @@ fn handle_input_events(tx: mpsc::Sender<CLMP3Event>) {
 
 pub struct App {
     exit: bool,
+    event_tx: Sender<CLMP3Event>,
+    event_rx: Receiver<CLMP3Event>,
     main_widget: MainWidget,
-    handler_map:
-        HashMap<(KeyEventKind, KeyModifiers, KeyCode), Rc<dyn Fn(&mut App) -> io::Result<()>>>,
+    render_settings: Arc<RenderSettings>,
+    handler_map: HashMap<(KeyEventKind, KeyModifiers, KeyCode), Rc<dyn Fn(&mut App)>>,
     audio_player: AudioPlayer,
+    audio_controls: Arc<AudioControls>,
 }
 
 impl App {
     pub fn new() -> App {
-        let (audio_player, player_controls) = AudioPlayer::new();
+        let (event_tx, event_rx) = mpsc::channel::<CLMP3Event>();
+        let (audio_player, audio_controls, queue) = AudioPlayer::new(event_tx.clone());
+        let (main_widget, render_settings) = MainWidget::new(audio_controls.clone(), queue);
         App {
             exit: false,
-            main_widget: MainWidget::new(player_controls),
+            event_tx: event_tx,
+            event_rx: event_rx,
+            main_widget: main_widget,
+            render_settings: render_settings,
             handler_map: App::get_handler_map(),
             audio_player,
+            audio_controls,
         }
     }
 
-    fn get_handler_map()
-    -> HashMap<(KeyEventKind, KeyModifiers, KeyCode), Rc<dyn Fn(&mut App) -> io::Result<()>>> {
-        let mut map: HashMap<
-            (KeyEventKind, KeyModifiers, KeyCode),
-            Rc<dyn Fn(&mut App) -> io::Result<()>>,
-        > = HashMap::new();
+    fn get_handler_map() -> HashMap<(KeyEventKind, KeyModifiers, KeyCode), Rc<dyn Fn(&mut App)>> {
+        let mut map: HashMap<(KeyEventKind, KeyModifiers, KeyCode), Rc<dyn Fn(&mut App)>> =
+            HashMap::new();
 
         map.insert(
-            (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Char('q')),
+            (
+                KeyEventKind::Press,
+                KeyModifiers::CONTROL,
+                KeyCode::Char('c'),
+            ),
             Rc::new(App::exit_app),
         );
 
         map.insert(
             (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Char('p')),
-            Rc::new(|app| App::set_selected_widget(app, CLMP3Widgets::Player)),
+            Rc::new(|app| App::set_selected_widget(app, CLMP3Widget::Player)),
         );
 
         map.insert(
             (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Char('d')),
-            Rc::new(|app| App::set_selected_widget(app, CLMP3Widgets::Display)),
+            Rc::new(|app| App::set_selected_widget(app, CLMP3Widget::Display)),
         );
 
         map.insert(
             (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Char('l')),
-            Rc::new(|app| App::set_selected_widget(app, CLMP3Widgets::Load)),
+            Rc::new(|app| App::set_selected_widget(app, CLMP3Widget::Load)),
         );
 
         map.insert(
             (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Char('q')),
-            Rc::new(|app| App::set_selected_widget(app, CLMP3Widgets::Queue)),
+            Rc::new(|app| App::set_selected_widget(app, CLMP3Widget::Queue)),
         );
 
         map.insert(
@@ -81,31 +99,63 @@ impl App {
             Rc::new(App::start_stop),
         );
 
+        map.insert(
+            (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Up),
+            Rc::new(|app| App::on_navigation_key(app, KeyCode::Up)),
+        );
+
+        map.insert(
+            (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Down),
+            Rc::new(|app| App::on_navigation_key(app, KeyCode::Down)),
+        );
+
+        map.insert(
+            (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Left),
+            Rc::new(|app| App::on_navigation_key(app, KeyCode::Left)),
+        );
+
+        map.insert(
+            (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Right),
+            Rc::new(|app| App::on_navigation_key(app, KeyCode::Right)),
+        );
+
+        map.insert(
+            (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Enter),
+            Rc::new(|app| App::on_navigation_key(app, KeyCode::Enter)),
+        );
+
+        map.insert(
+            (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Backspace),
+            Rc::new(|app| App::on_navigation_key(app, KeyCode::Backspace)),
+        );
+
         map
     }
 
     pub fn start(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
-        let (event_tx, event_rx) = mpsc::channel::<CLMP3Event>();
+        let event_tx = self.event_tx.clone();
 
         thread::spawn(move || {
-            handle_input_events(event_tx.clone());
+            handle_input_events(event_tx);
         });
 
         self.main_widget.draw(terminal)?;
 
-        self.run(terminal, event_rx)
+        self.run(terminal)
     }
 
-    fn run(&mut self, terminal: &mut DefaultTerminal, rx: Receiver<CLMP3Event>) -> io::Result<()> {
+    fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
         while !self.exit {
-            let event = rx
+            let event = self
+                .event_rx
                 .recv()
                 .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
             match event {
-                CLMP3Event::KeyInput(key_event) => self.handle_key_event(key_event)?,
+                CLMP3Event::KeyInput(key_event) => self.handle_key_event(key_event),
                 CLMP3Event::MouseInput(mouse_event) => todo!(),
                 CLMP3Event::Resize => {}
+                CLMP3Event::SongEnded => self.handle_song_ended(),
             }
             self.main_widget.draw(terminal)?;
         }
@@ -113,33 +163,44 @@ impl App {
         Ok(())
     }
 
-    fn handle_key_event(&mut self, key_event: KeyEvent) -> io::Result<()> {
+    fn handle_key_event(&mut self, key_event: KeyEvent) {
         match self
             .handler_map
             .get(&(key_event.kind, key_event.modifiers, key_event.code))
             .cloned()
         {
             Some(func) => func(self),
-            None => Ok(()),
+            None => (),
         }
     }
 
-    fn exit_app(app: &mut App) -> io::Result<()> {
+    fn handle_song_ended(&mut self) {
+        if self.audio_player.has_source() {
+            self.audio_player.play_next();
+        } else {
+            self.audio_controls
+                .is_stopped
+                .store(true, Ordering::Relaxed);
+        }
+    }
+
+    fn exit_app(app: &mut App) {
         app.exit = true;
-        Ok(())
     }
 
-    fn set_selected_widget(app: &mut App, val: CLMP3Widgets) -> io::Result<()> {
-        app.main_widget.set_selected_widget(val);
-        Ok(())
+    fn set_selected_widget(app: &mut App, val: CLMP3Widget) {
+        app.render_settings.set_selected_widget(val);
     }
 
-    fn start_stop(app: &mut App) -> io::Result<()> {
-        if app.audio_player.has_source {
+    fn on_navigation_key(app: &mut App, key: KeyCode) {
+        app.main_widget.on_navigation_key(key);
+    }
+
+    fn start_stop(app: &mut App) {
+        if app.audio_player.has_source() {
             app.audio_player.start_stop();
         } else {
-            app.main_widget.set_is_loading(true);
+            app.render_settings.set_selected_widget(CLMP3Widget::Load);
         }
-        Ok(())
     }
 }

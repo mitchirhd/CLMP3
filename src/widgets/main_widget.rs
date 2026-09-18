@@ -1,11 +1,19 @@
-use std::{io, sync::Arc};
-
-use crate::{
-    audio::AudioControls,
-    enums::CLMP3Widgets,
-    widgets::{display::DisplayWidget, load::LoadWidget, player::PlayerWidget, queue::QueueWidget},
+use std::{
+    io,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, AtomicPtr, Ordering},
+    },
 };
 
+use crate::{
+    audio::{AudioControls, SourceQueue}, enums::{CLMP3Widget, WidgetArea}, widgets::{
+        display::DisplayWidget, load::LoadWidget, player::PlayerWidget, queue::QueueWidget,
+        traits::InputWidget,
+    },
+};
+
+use crossterm::event::KeyCode;
 use ratatui::{
     DefaultTerminal,
     layout::{Constraint, Direction, Layout, Rect},
@@ -15,12 +23,21 @@ use ratatui::{
 };
 
 pub struct RenderSettings {
-    is_loading: bool,
-    selected_widget: CLMP3Widgets,
+    selected_widget: Mutex<CLMP3Widget>,
+}
+
+impl RenderSettings {
+    pub fn get_selected_widget(&self) -> CLMP3Widget {
+        *self.selected_widget.lock().expect("Mutex acquired")
+    }
+
+    pub fn set_selected_widget(&self, val: CLMP3Widget) {
+        *self.selected_widget.lock().expect("Mutex acquired") = val;
+    }
 }
 
 pub struct MainWidget {
-    render_settings: RenderSettings,
+    render_settings: Arc<RenderSettings>,
     player_widget: PlayerWidget,
     display_widget: DisplayWidget,
     queue_widget: QueueWidget,
@@ -28,25 +45,34 @@ pub struct MainWidget {
 }
 
 impl MainWidget {
-    pub fn new(controls: Arc<AudioControls>) -> MainWidget {
-        MainWidget {
-            render_settings: RenderSettings {
-                is_loading: false,
-                selected_widget: CLMP3Widgets::Player,
+    pub fn new(controls: Arc<AudioControls>, queue: Arc<SourceQueue>) -> (MainWidget, Arc<RenderSettings>) {
+        let render_settings = Arc::new(RenderSettings {
+            selected_widget: Mutex::new(CLMP3Widget::Player),
+        });
+        (
+            MainWidget {
+                render_settings: render_settings.clone(),
+                player_widget: PlayerWidget::new(controls),
+                display_widget: DisplayWidget::new(),
+                queue_widget: QueueWidget::new(queue.clone()),
+                load_widget: LoadWidget::new(queue),
             },
-            player_widget: PlayerWidget::new(controls),
-            display_widget: DisplayWidget::new(),
-            queue_widget: QueueWidget::new(),
-            load_widget: LoadWidget::new(),
+            render_settings,
+        )
+    }
+
+    pub fn on_navigation_key(&mut self, key: KeyCode) {
+        let widget: Option<&mut dyn InputWidget> = match self.render_settings.get_selected_widget()
+        {
+            CLMP3Widget::Player => None,
+            CLMP3Widget::Display => None,
+            CLMP3Widget::Load => Some(&mut self.load_widget),
+            CLMP3Widget::Queue => None,
+        };
+
+        if let Some(w) = widget {
+            w.on_input(key);
         }
-    }
-
-    pub fn set_is_loading(&mut self, val: bool) {
-        self.render_settings.is_loading = val;
-    }
-
-    pub fn set_selected_widget(&mut self, val: CLMP3Widgets) {
-        self.render_settings.selected_widget = val;
     }
 
     pub fn draw(&self, terminal: &mut DefaultTerminal) -> io::Result<()> {
@@ -57,9 +83,9 @@ impl MainWidget {
     fn render_display_area(&self, display_area: Rect, buf: &mut ratatui::prelude::Buffer) {
         let display_block = Block::bordered()
             .title(Line::from(" Display Area "))
-            .border_set(self.get_thickness(CLMP3Widgets::Display));
+            .border_set(self.get_thickness(WidgetArea::Display));
 
-        if self.render_settings.is_loading {
+        if self.render_settings.get_selected_widget() == CLMP3Widget::Load {
             self.load_widget
                 .render(display_block.inner(display_area), buf);
         } else {
@@ -73,7 +99,7 @@ impl MainWidget {
     fn render_queue_area(&self, queue_area: Rect, buf: &mut ratatui::prelude::Buffer) {
         let queue_block = Block::bordered()
             .title(Line::from(" Queue Area "))
-            .border_set(self.get_thickness(CLMP3Widgets::Queue));
+            .border_set(self.get_thickness(WidgetArea::Queue));
 
         self.queue_widget.render(queue_block.inner(queue_area), buf);
 
@@ -83,7 +109,7 @@ impl MainWidget {
     fn render_player_area(&self, player_area: Rect, buf: &mut ratatui::prelude::Buffer) {
         let player_block = Block::bordered()
             .title(Line::from(" Player Area "))
-            .border_set(self.get_thickness(CLMP3Widgets::Player));
+            .border_set(self.get_thickness(WidgetArea::Player));
 
         self.player_widget
             .render(player_block.inner(player_area), buf);
@@ -91,8 +117,8 @@ impl MainWidget {
         player_block.render(player_area, buf);
     }
 
-    fn get_thickness(&self, check: CLMP3Widgets) -> border::Set<'static> {
-        if self.render_settings.selected_widget == check {
+    fn get_thickness(&self, check: WidgetArea) -> border::Set<'static> {
+        if self.render_settings.get_selected_widget().getArea() == check {
             border::THICK
         } else {
             border::PLAIN

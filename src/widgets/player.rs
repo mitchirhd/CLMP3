@@ -43,7 +43,7 @@ impl Widget for &PlayerWidget {
 
         let stopped = self.audio_controls.is_stopped.load(Ordering::Relaxed);
         let paused = self.audio_controls.is_paused.load(Ordering::Relaxed);
-        let play_pause_symbol = if stopped || paused { "⏸" } else { "▶" };
+        let play_pause_symbol = if stopped || paused { "▶" } else { "⏸" };
 
         render_button("⏮", button_area[0], buf);
         render_button(play_pause_symbol, button_area[1], buf);

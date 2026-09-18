@@ -1,10 +1,16 @@
-use ratatui::widgets::Widget;
+use std::sync::Arc;
 
-pub struct QueueWidget {}
+use ratatui::widgets::{List, Widget};
+
+use crate::audio::SourceQueue;
+
+pub struct QueueWidget {
+    queue: Arc<SourceQueue>,
+}
 
 impl QueueWidget {
-    pub fn new() -> QueueWidget {
-        QueueWidget {}
+    pub fn new(queue: Arc<SourceQueue>) -> QueueWidget {
+        QueueWidget { queue: queue }
     }
 }
 
@@ -13,10 +19,13 @@ impl Widget for &QueueWidget {
     where
         Self: Sized,
     {
-        // let queue_block = Block::bordered()
-        //     .title(Line::from(" Queue Area "))
-        //     .border_set(border::THICK);
+        let items = self.queue.as_vec().into_iter().map(|s| match s {
+            crate::source_builder::SourceType::SineWave(freq, _) => format!("Sine {freq}"),
+            crate::source_builder::SourceType::File(file) => format!("{}", file.name),
+        });
 
-        // queue_block.render(area, buf);
+        let list = List::new(items);
+
+        list.render(area, buf);
     }
 }

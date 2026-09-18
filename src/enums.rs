@@ -4,12 +4,31 @@ pub enum CLMP3Event {
     KeyInput(KeyEvent),
     MouseInput(MouseEvent),
     Resize,
+    SongEnded,
 }
 
-#[derive(PartialEq, Eq)]
-pub enum CLMP3Widgets {
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum CLMP3Widget {
     Player,
     Display,
     Load,
+    Queue,
+}
+
+impl CLMP3Widget {
+    pub fn getArea(&self) -> WidgetArea {
+        match self {
+            CLMP3Widget::Player => WidgetArea::Player,
+            CLMP3Widget::Display => WidgetArea::Display,
+            CLMP3Widget::Load => WidgetArea::Display,
+            CLMP3Widget::Queue => WidgetArea::Queue,
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum WidgetArea {
+    Player,
+    Display,
     Queue,
 }
