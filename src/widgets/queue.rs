@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{List, ListState, StatefulWidget},
 };
 
-use crate::{app_state::AppState, audio::SourceQueue, widgets::traits::StatefulInputWidget};
+use crate::{app_state::AppState, audio::SourceQueue, widgets::traits::InputWidget};
 
 pub struct QueueWidget {
     queue: Arc<SourceQueue>,
@@ -41,7 +41,7 @@ impl StatefulWidget for &QueueWidget {
     }
 }
 
-impl StatefulInputWidget for QueueWidget {
+impl InputWidget for QueueWidget {
     fn on_input(&mut self, key: crossterm::event::KeyCode, state: &mut AppState) {
         match key {
             KeyCode::Down => state.queue_state.select_next(),

@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
 use crate::enums::CLMP3Event;
@@ -50,9 +50,18 @@ impl SourceQueue {
 pub struct AudioControls {
     is_stopped: AtomicBool,
     is_paused: AtomicBool,
+    volume: Mutex<f32>,
 }
 
 impl AudioControls {
+    pub fn new() -> AudioControls {
+        AudioControls {
+            is_stopped: AtomicBool::new(true),
+            is_paused: AtomicBool::new(false),
+            volume: Mutex::new(1.0),
+        }
+    }
+
     pub fn get_is_stopped(&self) -> bool {
         self.is_stopped.load(Ordering::Relaxed)
     }
@@ -67,6 +76,14 @@ impl AudioControls {
 
     pub fn set_is_paused(&self, val: bool) {
         self.is_paused.store(val, Ordering::Relaxed);
+    }
+
+    pub fn get_volume(&self) -> f32 {
+        *self.volume.lock().expect("Mutex acquired")
+    }
+
+    pub fn set_volume(&self, val: f32) {
+        *self.volume.lock().expect("Mutex acquired") = val;
     }
 }
 
@@ -86,10 +103,7 @@ impl AudioPlayer {
             rodio::DeviceSinkBuilder::open_default_sink().expect("open default audio stream");
         let player = rodio::Player::connect_new(handle.mixer());
 
-        let controls = Arc::new(AudioControls {
-            is_stopped: AtomicBool::new(true),
-            is_paused: AtomicBool::new(false),
-        });
+        let controls = Arc::new(AudioControls::new());
 
         let queue = Arc::new(SourceQueue::new());
 
@@ -137,16 +151,19 @@ impl AudioPlayer {
             Some(source) => {
                 let queue_source = source
                     .build()
+                    .amplify(self.controls.get_volume())
+                    .skippable()
                     .stoppable()
                     .pausable(false)
-                    .skippable()
                     .periodic_access(Duration::from_millis(1 / 30), move |src| {
                         if controls.get_is_stopped() {
-                            src.inner_mut().inner_mut().stop();
+                            src.inner_mut().stop();
                         } else {
                             let paused = controls.get_is_paused();
-                            src.inner_mut().set_paused(paused);
+                            src.set_paused(paused);
                         }
+
+                        src.inner_mut().inner_mut().inner_mut().inner_mut().amplify(controls.get_volume());
                     });
                 self.player.append(queue_source);
 

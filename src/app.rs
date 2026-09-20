@@ -39,7 +39,7 @@ pub struct App {
     event_rx: Receiver<CLMP3Event>,
     main_widget: MainWidget,
     widget_state: AppState,
-    render_settings: Arc<RenderSettings>,
+    render_settings: Rc<RenderSettings>,
     handler_map: HashMap<(KeyEventKind, KeyModifiers, KeyCode), Rc<dyn Fn(&mut App)>>,
     audio_player: AudioPlayer,
     audio_controls: Arc<AudioControls>,

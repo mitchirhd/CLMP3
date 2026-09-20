@@ -7,7 +7,7 @@ pub enum CLMP3Event {
     SongEnded,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CLMP3Widget {
     Player,
     Display,

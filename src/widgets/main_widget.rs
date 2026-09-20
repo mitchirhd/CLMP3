@@ -1,6 +1,9 @@
 use std::{
+    cell::{Cell, RefCell},
+    collections::HashMap,
     io,
-    sync::{Arc, Mutex},
+    rc::Rc,
+    sync::Arc,
 };
 
 use crate::{
@@ -8,11 +11,8 @@ use crate::{
     audio::{AudioControls, SourceQueue},
     enums::{CLMP3Widget, WidgetArea},
     widgets::{
-        display::DisplayWidget,
-        load::LoadWidget,
-        player::PlayerWidget,
-        queue::QueueWidget,
-        traits::{InputWidget, StatefulInputWidget},
+        display::DisplayWidget, load::LoadWidget, player::PlayerWidget, queue::QueueWidget,
+        traits::InputWidget,
     },
 };
 
@@ -26,79 +26,79 @@ use ratatui::{
 };
 
 pub struct RenderSettings {
-    selected_widget: Mutex<CLMP3Widget>,
-    last_display_widget: Mutex<CLMP3Widget>,
+    selected_widget: Cell<CLMP3Widget>,
+    last_display_widget: Cell<CLMP3Widget>,
 }
 
 impl RenderSettings {
     pub fn get_selected_widget(&self) -> CLMP3Widget {
-        *self.selected_widget.lock().expect("Mutex acquired")
+        self.selected_widget.get()
     }
 
     pub fn set_selected_widget(&self, val: CLMP3Widget) {
-        *self.selected_widget.lock().expect("Mutex acquired") = val;
+        self.selected_widget.set(val);
         if val.get_area() == WidgetArea::Display {
             self.set_last_display_widget(val);
         }
     }
 
-    fn set_last_display_widget(&self, val: CLMP3Widget) {
-        *self.last_display_widget.lock().expect("Mutex acquired") = val
+    pub fn get_last_display_widget(&self) -> CLMP3Widget {
+        self.last_display_widget.get()
     }
 
-    pub fn get_last_display_widget(&self) -> CLMP3Widget {
-        *self.last_display_widget.lock().expect("Mutex acquired")
+    fn set_last_display_widget(&self, val: CLMP3Widget) {
+        self.last_display_widget.set(val);
     }
 }
 
 pub struct MainWidget {
-    render_settings: Arc<RenderSettings>,
-    player_widget: PlayerWidget,
-    display_widget: DisplayWidget,
-    queue_widget: QueueWidget,
-    load_widget: LoadWidget,
+    render_settings: Rc<RenderSettings>,
+    input_widgets: HashMap<CLMP3Widget, Rc<RefCell<dyn InputWidget>>>,
+    player_widget: Rc<RefCell<PlayerWidget>>,
+    display_widget: Rc<RefCell<DisplayWidget>>,
+    queue_widget: Rc<RefCell<QueueWidget>>,
+    load_widget: Rc<RefCell<LoadWidget>>,
 }
 
 impl MainWidget {
     pub fn new(
         controls: Arc<AudioControls>,
         queue: Arc<SourceQueue>,
-    ) -> (MainWidget, Arc<RenderSettings>) {
-        let render_settings = Arc::new(RenderSettings {
-            selected_widget: Mutex::new(CLMP3Widget::Player),
-            last_display_widget: Mutex::new(CLMP3Widget::Display),
+    ) -> (MainWidget, Rc<RenderSettings>) {
+        let render_settings = Rc::new(RenderSettings {
+            selected_widget: Cell::new(CLMP3Widget::Player),
+            last_display_widget: Cell::new(CLMP3Widget::Display),
         });
+
+        let player_widget = Rc::new(RefCell::new(PlayerWidget::new(controls)));
+        let queue_widget = Rc::new(RefCell::new(QueueWidget::new(queue.clone())));
+        let load_widget = Rc::new(RefCell::new(LoadWidget::new(queue)));
+
+        let mut input_widgets: HashMap<CLMP3Widget, Rc<RefCell<dyn InputWidget>>> = HashMap::new();
+        input_widgets.insert(CLMP3Widget::Player, player_widget.clone());
+        input_widgets.insert(CLMP3Widget::Queue, queue_widget.clone());
+        input_widgets.insert(CLMP3Widget::Load, load_widget.clone());
+
         (
             MainWidget {
                 render_settings: render_settings.clone(),
-                player_widget: PlayerWidget::new(controls),
-                display_widget: DisplayWidget::new(),
-                queue_widget: QueueWidget::new(queue.clone()),
-                load_widget: LoadWidget::new(queue),
+                input_widgets: input_widgets,
+                player_widget: player_widget,
+                display_widget: Rc::new(RefCell::new(DisplayWidget::new())),
+                queue_widget: queue_widget,
+                load_widget: load_widget,
             },
             render_settings,
         )
     }
 
     pub fn on_navigation_key(&mut self, key: KeyCode, state: &mut AppState) {
-        enum InputWidgetKind<'a> {
-            Regular(&'a mut dyn InputWidget),
-            Stateful(&'a mut dyn StatefulInputWidget),
-        }
-
-        // let widget_kind: Option<&mut dyn InputWidget> = match self.render_settings.get_selected_widget()
-        let widget_kind: InputWidgetKind = match self.render_settings.get_selected_widget() {
-            CLMP3Widget::Player => return,
-            CLMP3Widget::Display => return,
-            CLMP3Widget::Load => InputWidgetKind::Regular(&mut self.load_widget),
-            CLMP3Widget::Queue => InputWidgetKind::Stateful(&mut self.queue_widget),
-        };
-
-        match widget_kind {
-            InputWidgetKind::Regular(input_widget) => input_widget.on_input(key),
-            InputWidgetKind::Stateful(stateful_input_widget) => {
-                stateful_input_widget.on_input(key, state)
-            }
+        match self
+            .input_widgets
+            .get(&self.render_settings.get_selected_widget())
+        {
+            Some(widget) => widget.borrow_mut().on_input(key, state),
+            None => {},
         }
     }
 
@@ -112,13 +112,11 @@ impl MainWidget {
             .title(Line::from(" Display Area "))
             .border_set(self.get_thickness(WidgetArea::Display));
 
+        let inner = display_block.inner(display_area);
+
         match self.render_settings.get_last_display_widget() {
-            CLMP3Widget::Display => self
-                .display_widget
-                .render(display_block.inner(display_area), buf),
-            CLMP3Widget::Load => self
-                .load_widget
-                .render(display_block.inner(display_area), buf),
+            CLMP3Widget::Display => self.display_widget.borrow().render(inner, buf),
+            CLMP3Widget::Load => self.load_widget.borrow().render(inner, buf),
             _ => {}
         }
 
@@ -138,6 +136,7 @@ impl MainWidget {
         if self.render_settings.get_selected_widget() != CLMP3Widget::Queue {}
 
         self.queue_widget
+            .borrow_mut()
             .render(queue_block.inner(queue_area), buf, state);
 
         queue_block.render(queue_area, buf);
@@ -149,6 +148,7 @@ impl MainWidget {
             .border_set(self.get_thickness(WidgetArea::Player));
 
         self.player_widget
+            .borrow_mut()
             .render(player_block.inner(player_area), buf);
 
         player_block.render(player_area, buf);

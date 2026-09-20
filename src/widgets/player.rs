@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
+use crossterm::event::KeyCode;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
     widgets::{Gauge, Paragraph, Widget},
 };
 
-use crate::audio::AudioControls;
+use crate::{app_state::AppState, audio::AudioControls, widgets::traits::InputWidget};
 
 pub struct PlayerWidget {
     audio_controls: Arc<AudioControls>,
@@ -53,4 +54,10 @@ impl Widget for &PlayerWidget {
 
 fn render_button(label: &str, area: Rect, buf: &mut Buffer) {
     Paragraph::new(label).centered().render(area, buf);
+}
+
+impl InputWidget for PlayerWidget {
+    fn on_input(&mut self, key: KeyCode, state: &mut AppState) {
+        // todo!()
+    }
 }
