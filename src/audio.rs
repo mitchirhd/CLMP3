@@ -48,12 +48,30 @@ impl SourceQueue {
 }
 
 pub struct AudioControls {
-    pub is_stopped: AtomicBool,
-    pub is_paused: AtomicBool,
+    is_stopped: AtomicBool,
+    is_paused: AtomicBool,
+}
+
+impl AudioControls {
+    pub fn get_is_stopped(&self) -> bool {
+        self.is_stopped.load(Ordering::Relaxed)
+    }
+
+    pub fn set_is_stopped(&self, val: bool) {
+        self.is_stopped.store(val, Ordering::Relaxed);
+    }
+
+    pub fn get_is_paused(&self) -> bool {
+        self.is_paused.load(Ordering::Relaxed)
+    }
+
+    pub fn set_is_paused(&self, val: bool) {
+        self.is_paused.store(val, Ordering::Relaxed);
+    }
 }
 
 pub struct AudioPlayer {
-    sink: MixerDeviceSink,
+    _sink: MixerDeviceSink,
     player: Player,
     controls: Arc<AudioControls>,
     queue: Arc<SourceQueue>,
@@ -77,7 +95,7 @@ impl AudioPlayer {
 
         (
             AudioPlayer {
-                sink: handle,
+                _sink: handle,
                 player: player,
                 controls: controls.clone(),
                 queue: queue.clone(),
@@ -89,9 +107,9 @@ impl AudioPlayer {
     }
 
     pub fn can_play(path: &Path) -> bool {
-        match path.extension().and_then(|ext| ext.to_str()) {
+        match path.extension() {
             Some(ext) => matches!(
-                ext.to_lowercase().as_str(),
+                ext.to_str().unwrap_or_default(),
                 "mp3" | "wav" | "flac" | "ogg" | "aac" | "m4a"
             ),
             None => false,
@@ -104,19 +122,17 @@ impl AudioPlayer {
 
     pub fn start_stop(&mut self) {
         if self.has_source() {
-            if self.controls.is_stopped.load(Ordering::Relaxed) {
+            if self.controls.get_is_stopped() {
                 self.play_next();
-            } else if self.controls.is_paused.load(Ordering::Relaxed) {
-                self.controls.is_paused.store(false, Ordering::Relaxed);
             } else {
-                self.controls.is_paused.store(true, Ordering::Relaxed);
+                self.controls.set_is_paused(!self.controls.get_is_paused());
             }
         }
     }
 
     pub fn play_next(&mut self) {
         let controls = self.controls.clone();
-        controls.is_stopped.store(false, Ordering::Relaxed);
+        controls.set_is_stopped(false);
         match self.queue.dequeue() {
             Some(source) => {
                 let queue_source = source
@@ -125,10 +141,10 @@ impl AudioPlayer {
                     .pausable(false)
                     .skippable()
                     .periodic_access(Duration::from_millis(1 / 30), move |src| {
-                        if controls.is_stopped.load(Ordering::Relaxed) {
+                        if controls.get_is_stopped() {
                             src.inner_mut().inner_mut().stop();
                         } else {
-                            let paused = controls.is_paused.load(Ordering::Relaxed);
+                            let paused = controls.get_is_paused();
                             src.inner_mut().set_paused(paused);
                         }
                     });
@@ -136,13 +152,11 @@ impl AudioPlayer {
 
                 let event_tx = self.event_tx.clone();
                 let end_callback = EmptyCallback::new(Box::new(move || {
-                    event_tx.send(CLMP3Event::SongEnded);
+                    event_tx.send(CLMP3Event::SongEnded).unwrap();
                 }));
                 self.player.append(end_callback);
             }
             None => return,
         }
     }
-
-    fn on_song_end() {}
 }

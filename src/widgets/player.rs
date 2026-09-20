@@ -1,4 +1,4 @@
-use std::sync::{Arc, atomic::Ordering};
+use std::sync::Arc;
 
 use ratatui::{
     buffer::Buffer,
@@ -41,8 +41,8 @@ impl Widget for &PlayerWidget {
             ])
             .split(button_area.centered_horizontally(Constraint::Ratio(1, 2)));
 
-        let stopped = self.audio_controls.is_stopped.load(Ordering::Relaxed);
-        let paused = self.audio_controls.is_paused.load(Ordering::Relaxed);
+        let stopped = self.audio_controls.get_is_stopped();
+        let paused = self.audio_controls.get_is_paused();
         let play_pause_symbol = if stopped || paused { "▶" } else { "⏸" };
 
         render_button("⏮", button_area[0], buf);

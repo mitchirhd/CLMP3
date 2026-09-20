@@ -1,8 +1,8 @@
-use crossterm::event::{KeyEvent, MouseEvent};
+use crossterm::event::KeyEvent;
 
 pub enum CLMP3Event {
     KeyInput(KeyEvent),
-    MouseInput(MouseEvent),
+    // MouseInput(MouseEvent),
     Resize,
     SongEnded,
 }
@@ -16,7 +16,7 @@ pub enum CLMP3Widget {
 }
 
 impl CLMP3Widget {
-    pub fn getArea(&self) -> WidgetArea {
+    pub fn get_area(&self) -> WidgetArea {
         match self {
             CLMP3Widget::Player => WidgetArea::Player,
             CLMP3Widget::Display => WidgetArea::Display,

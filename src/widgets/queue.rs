@@ -1,8 +1,12 @@
 use std::sync::Arc;
 
-use ratatui::widgets::{List, Widget};
+use crossterm::event::KeyCode;
+use ratatui::{
+    style::Style,
+    widgets::{List, ListState, StatefulWidget},
+};
 
-use crate::audio::SourceQueue;
+use crate::{app_state::AppState, audio::SourceQueue, widgets::traits::StatefulInputWidget};
 
 pub struct QueueWidget {
     queue: Arc<SourceQueue>,
@@ -14,18 +18,36 @@ impl QueueWidget {
     }
 }
 
-impl Widget for &QueueWidget {
-    fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer)
-    where
-        Self: Sized,
-    {
+impl StatefulWidget for &QueueWidget {
+    type State = ListState;
+
+    fn render(
+        self,
+        area: ratatui::prelude::Rect,
+        buf: &mut ratatui::prelude::Buffer,
+        state: &mut Self::State,
+    ) {
         let items = self.queue.as_vec().into_iter().map(|s| match s {
             crate::source_builder::SourceType::SineWave(freq, _) => format!("Sine {freq}"),
             crate::source_builder::SourceType::File(file) => format!("{}", file.name),
         });
 
-        let list = List::new(items);
+        let list = List::new(items)
+            .highlight_style(Style::new().reversed())
+            .highlight_symbol(">>")
+            .repeat_highlight_symbol(true);
 
-        list.render(area, buf);
+        StatefulWidget::render(list, area, buf, state);
+    }
+}
+
+impl StatefulInputWidget for QueueWidget {
+    fn on_input(&mut self, key: crossterm::event::KeyCode, state: &mut AppState) {
+        match key {
+            KeyCode::Down => state.queue_state.select_next(),
+            KeyCode::Up => state.queue_state.select_previous(),
+            KeyCode::Left => state.queue_state.select(None),
+            _ => {}
+        }
     }
 }

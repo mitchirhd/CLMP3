@@ -3,6 +3,7 @@ mod app;
 mod enums;
 mod widgets;
 use app::App;
+mod app_state;
 mod audio;
 mod source_builder;
 

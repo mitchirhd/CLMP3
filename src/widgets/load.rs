@@ -17,11 +17,22 @@ pub struct LoadWidget {
 
 impl LoadWidget {
     pub fn new(queue: Arc<SourceQueue>) -> LoadWidget {
+        let mut file_explorer =
+            FileExplorerBuilder::build_with_theme(Theme::default().add_default_title())
+                .expect("Could not create file explorer");
+
+        file_explorer
+            .set_filter_map(|file| {
+                if AudioPlayer::can_play(&file.path) || file.is_dir {
+                    Some(file)
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+
         LoadWidget {
-            file_explorer: FileExplorerBuilder::build_with_theme(
-                Theme::default().add_default_title(),
-            )
-            .expect("Could not create file explorer"),
+            file_explorer,
             queue: queue,
         }
     }

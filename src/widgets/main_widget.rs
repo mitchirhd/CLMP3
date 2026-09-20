@@ -1,15 +1,18 @@
 use std::{
     io,
-    sync::{
-        Arc, Mutex,
-        atomic::{AtomicBool, AtomicPtr, Ordering},
-    },
+    sync::{Arc, Mutex},
 };
 
 use crate::{
-    audio::{AudioControls, SourceQueue}, enums::{CLMP3Widget, WidgetArea}, widgets::{
-        display::DisplayWidget, load::LoadWidget, player::PlayerWidget, queue::QueueWidget,
-        traits::InputWidget,
+    app_state::AppState,
+    audio::{AudioControls, SourceQueue},
+    enums::{CLMP3Widget, WidgetArea},
+    widgets::{
+        display::DisplayWidget,
+        load::LoadWidget,
+        player::PlayerWidget,
+        queue::QueueWidget,
+        traits::{InputWidget, StatefulInputWidget},
     },
 };
 
@@ -19,11 +22,12 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     symbols::border,
     text::Line,
-    widgets::{Block, Widget},
+    widgets::{Block, ListState, StatefulWidget, Widget},
 };
 
 pub struct RenderSettings {
     selected_widget: Mutex<CLMP3Widget>,
+    last_display_widget: Mutex<CLMP3Widget>,
 }
 
 impl RenderSettings {
@@ -33,6 +37,17 @@ impl RenderSettings {
 
     pub fn set_selected_widget(&self, val: CLMP3Widget) {
         *self.selected_widget.lock().expect("Mutex acquired") = val;
+        if val.get_area() == WidgetArea::Display {
+            self.set_last_display_widget(val);
+        }
+    }
+
+    fn set_last_display_widget(&self, val: CLMP3Widget) {
+        *self.last_display_widget.lock().expect("Mutex acquired") = val
+    }
+
+    pub fn get_last_display_widget(&self) -> CLMP3Widget {
+        *self.last_display_widget.lock().expect("Mutex acquired")
     }
 }
 
@@ -45,9 +60,13 @@ pub struct MainWidget {
 }
 
 impl MainWidget {
-    pub fn new(controls: Arc<AudioControls>, queue: Arc<SourceQueue>) -> (MainWidget, Arc<RenderSettings>) {
+    pub fn new(
+        controls: Arc<AudioControls>,
+        queue: Arc<SourceQueue>,
+    ) -> (MainWidget, Arc<RenderSettings>) {
         let render_settings = Arc::new(RenderSettings {
             selected_widget: Mutex::new(CLMP3Widget::Player),
+            last_display_widget: Mutex::new(CLMP3Widget::Display),
         });
         (
             MainWidget {
@@ -61,22 +80,30 @@ impl MainWidget {
         )
     }
 
-    pub fn on_navigation_key(&mut self, key: KeyCode) {
-        let widget: Option<&mut dyn InputWidget> = match self.render_settings.get_selected_widget()
-        {
-            CLMP3Widget::Player => None,
-            CLMP3Widget::Display => None,
-            CLMP3Widget::Load => Some(&mut self.load_widget),
-            CLMP3Widget::Queue => None,
+    pub fn on_navigation_key(&mut self, key: KeyCode, state: &mut AppState) {
+        enum InputWidgetKind<'a> {
+            Regular(&'a mut dyn InputWidget),
+            Stateful(&'a mut dyn StatefulInputWidget),
+        }
+
+        // let widget_kind: Option<&mut dyn InputWidget> = match self.render_settings.get_selected_widget()
+        let widget_kind: InputWidgetKind = match self.render_settings.get_selected_widget() {
+            CLMP3Widget::Player => return,
+            CLMP3Widget::Display => return,
+            CLMP3Widget::Load => InputWidgetKind::Regular(&mut self.load_widget),
+            CLMP3Widget::Queue => InputWidgetKind::Stateful(&mut self.queue_widget),
         };
 
-        if let Some(w) = widget {
-            w.on_input(key);
+        match widget_kind {
+            InputWidgetKind::Regular(input_widget) => input_widget.on_input(key),
+            InputWidgetKind::Stateful(stateful_input_widget) => {
+                stateful_input_widget.on_input(key, state)
+            }
         }
     }
 
-    pub fn draw(&self, terminal: &mut DefaultTerminal) -> io::Result<()> {
-        terminal.draw(|frame| frame.render_widget(self, frame.area()))?;
+    pub fn draw(&mut self, terminal: &mut DefaultTerminal, state: &mut AppState) -> io::Result<()> {
+        terminal.draw(|frame| frame.render_stateful_widget(&*self, frame.area(), state))?;
         Ok(())
     }
 
@@ -85,23 +112,33 @@ impl MainWidget {
             .title(Line::from(" Display Area "))
             .border_set(self.get_thickness(WidgetArea::Display));
 
-        if self.render_settings.get_selected_widget() == CLMP3Widget::Load {
-            self.load_widget
-                .render(display_block.inner(display_area), buf);
-        } else {
-            self.display_widget
-                .render(display_block.inner(display_area), buf);
+        match self.render_settings.get_last_display_widget() {
+            CLMP3Widget::Display => self
+                .display_widget
+                .render(display_block.inner(display_area), buf),
+            CLMP3Widget::Load => self
+                .load_widget
+                .render(display_block.inner(display_area), buf),
+            _ => {}
         }
 
         display_block.render(display_area, buf);
     }
 
-    fn render_queue_area(&self, queue_area: Rect, buf: &mut ratatui::prelude::Buffer) {
+    fn render_queue_area(
+        &self,
+        queue_area: Rect,
+        buf: &mut ratatui::prelude::Buffer,
+        state: &mut ListState,
+    ) {
         let queue_block = Block::bordered()
             .title(Line::from(" Queue Area "))
             .border_set(self.get_thickness(WidgetArea::Queue));
 
-        self.queue_widget.render(queue_block.inner(queue_area), buf);
+        if self.render_settings.get_selected_widget() != CLMP3Widget::Queue {}
+
+        self.queue_widget
+            .render(queue_block.inner(queue_area), buf, state);
 
         queue_block.render(queue_area, buf);
     }
@@ -118,7 +155,7 @@ impl MainWidget {
     }
 
     fn get_thickness(&self, check: WidgetArea) -> border::Set<'static> {
-        if self.render_settings.get_selected_widget().getArea() == check {
+        if self.render_settings.get_selected_widget().get_area() == check {
             border::THICK
         } else {
             border::PLAIN
@@ -126,9 +163,15 @@ impl MainWidget {
     }
 }
 
-impl Widget for &MainWidget {
-    fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer)
-    where
+impl StatefulWidget for &MainWidget {
+    type State = AppState;
+
+    fn render(
+        self,
+        area: ratatui::prelude::Rect,
+        buf: &mut ratatui::prelude::Buffer,
+        state: &mut Self::State,
+    ) where
         Self: Sized,
     {
         let player_height = ((area.height as f32 * 0.15f32) as u16).clamp(10, 50);
@@ -149,7 +192,7 @@ impl Widget for &MainWidget {
             .areas(display_area);
 
         self.render_display_area(display_area, buf);
-        self.render_queue_area(queue_area, buf);
+        self.render_queue_area(queue_area, buf, &mut state.queue_state);
         self.render_player_area(player_area, buf);
     }
 }

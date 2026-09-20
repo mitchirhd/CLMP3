@@ -4,7 +4,6 @@ use std::{
     rc::Rc,
     sync::{
         Arc,
-        atomic::Ordering,
         mpsc::{self, Receiver, Sender},
     },
     thread,
@@ -14,6 +13,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::DefaultTerminal;
 
 use crate::{
+    app_state::AppState,
     audio::{AudioControls, AudioPlayer},
     enums::CLMP3Event,
     widgets::main_widget::RenderSettings,
@@ -26,7 +26,7 @@ fn handle_input_events(tx: mpsc::Sender<CLMP3Event>) {
             crossterm::event::Event::Key(key_event) => {
                 tx.send(CLMP3Event::KeyInput(key_event)).unwrap()
             }
-            crossterm::event::Event::Mouse(mouse_event) => {}
+            // crossterm::event::Event::Mouse(mouse_event) => {}
             crossterm::event::Event::Resize(_, _) => tx.send(CLMP3Event::Resize).unwrap(),
             _ => {}
         }
@@ -38,6 +38,7 @@ pub struct App {
     event_tx: Sender<CLMP3Event>,
     event_rx: Receiver<CLMP3Event>,
     main_widget: MainWidget,
+    widget_state: AppState,
     render_settings: Arc<RenderSettings>,
     handler_map: HashMap<(KeyEventKind, KeyModifiers, KeyCode), Rc<dyn Fn(&mut App)>>,
     audio_player: AudioPlayer,
@@ -54,6 +55,7 @@ impl App {
             event_tx: event_tx,
             event_rx: event_rx,
             main_widget: main_widget,
+            widget_state: AppState::new(),
             render_settings: render_settings,
             handler_map: App::get_handler_map(),
             audio_player,
@@ -139,7 +141,7 @@ impl App {
             handle_input_events(event_tx);
         });
 
-        self.main_widget.draw(terminal)?;
+        self.main_widget.draw(terminal, &mut self.widget_state)?;
 
         self.run(terminal)
     }
@@ -153,11 +155,11 @@ impl App {
 
             match event {
                 CLMP3Event::KeyInput(key_event) => self.handle_key_event(key_event),
-                CLMP3Event::MouseInput(mouse_event) => todo!(),
+                // CLMP3Event::MouseInput(mouse_event) => todo!(),
                 CLMP3Event::Resize => {}
                 CLMP3Event::SongEnded => self.handle_song_ended(),
             }
-            self.main_widget.draw(terminal)?;
+            self.main_widget.draw(terminal, &mut self.widget_state)?;
         }
 
         Ok(())
@@ -178,9 +180,7 @@ impl App {
         if self.audio_player.has_source() {
             self.audio_player.play_next();
         } else {
-            self.audio_controls
-                .is_stopped
-                .store(true, Ordering::Relaxed);
+            self.audio_controls.set_is_stopped(true);
         }
     }
 
@@ -193,7 +193,8 @@ impl App {
     }
 
     fn on_navigation_key(app: &mut App, key: KeyCode) {
-        app.main_widget.on_navigation_key(key);
+        app.main_widget
+            .on_navigation_key(key, &mut app.widget_state);
     }
 
     fn start_stop(app: &mut App) {
