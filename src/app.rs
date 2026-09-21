@@ -2,10 +2,7 @@ use std::{
     collections::HashMap,
     io,
     rc::Rc,
-    sync::{
-        Arc,
-        mpsc::{self, Receiver, Sender},
-    },
+    sync::mpsc::{self, Receiver, Sender},
     thread,
     time::Duration,
 };
@@ -13,11 +10,7 @@ use std::{
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::DefaultTerminal;
 
-use crate::{
-    app_state::AppState,
-    audio::{AudioControls, AudioPlayer},
-    enums::CLMP3Event,
-};
+use crate::{app_state::AppState, audio::AudioPlayer, enums::CLMP3Event};
 use crate::{enums::CLMP3Widget, widgets::main_widget::MainWidget};
 
 fn handle_input_events(tx: Sender<CLMP3Event>) {
@@ -45,29 +38,25 @@ pub struct App {
     event_tx: Sender<CLMP3Event>,
     event_rx: Receiver<CLMP3Event>,
     main_widget: MainWidget,
-    widget_state: AppState,
+    app_state: AppState,
     handler_map: HashMap<(KeyEventKind, KeyModifiers, KeyCode), Rc<dyn Fn(&mut App)>>,
     audio_player: AudioPlayer,
-    audio_controls: Arc<AudioControls>,
 }
 
 impl App {
     pub fn new() -> App {
         let (event_tx, event_rx) = mpsc::channel::<CLMP3Event>();
         let (audio_player, audio_controls, queue) = AudioPlayer::new(event_tx.clone());
-        let widget_state = AppState::new();
-
-        audio_controls.set_volume(widget_state.volume_state.value() as f32);
+        let app_state = AppState::new(audio_controls);
 
         App {
             exit: false,
             event_tx: event_tx,
             event_rx: event_rx,
-            main_widget: MainWidget::new(audio_controls.clone(), queue),
-            widget_state: widget_state,
+            main_widget: MainWidget::new(queue),
+            app_state,
             handler_map: App::get_handler_map(),
             audio_player,
-            audio_controls,
         }
     }
 
@@ -153,7 +142,7 @@ impl App {
             redraw_loop(event_tx);
         });
 
-        self.main_widget.draw(terminal, &mut self.widget_state)?;
+        self.main_widget.draw(terminal, &mut self.app_state)?;
 
         self.run(terminal)
     }
@@ -171,7 +160,7 @@ impl App {
                 CLMP3Event::Redraw => {}
                 CLMP3Event::SongEnded => self.handle_song_ended(),
             }
-            self.main_widget.draw(terminal, &mut self.widget_state)?;
+            self.main_widget.draw(terminal, &mut self.app_state)?;
         }
 
         Ok(())
@@ -189,13 +178,15 @@ impl App {
     }
 
     fn handle_song_ended(&mut self) {
-        self.audio_controls.set_position(Duration::ZERO);
-        self.audio_controls.set_total_duration(Duration::ZERO);
+        self.app_state.audio_controls.set_position(Duration::ZERO);
+        self.app_state
+            .audio_controls
+            .set_total_duration(Duration::ZERO);
         if self.audio_player.has_next() {
             // falls was in queue
             self.audio_player.play_next();
         } else {
-            self.audio_controls.set_is_stopped(true);
+            self.app_state.audio_controls.set_is_stopped(true);
         }
     }
 
@@ -204,20 +195,14 @@ impl App {
     }
 
     fn set_selected_widget(app: &mut App, val: CLMP3Widget) {
-        app.widget_state.set_selected_widget(val);
+        app.app_state.set_selected_widget(val);
     }
 
     fn on_navigation_key(app: &mut App, key: KeyCode) {
-        app.main_widget
-            .on_navigation_key(key, &mut app.widget_state);
+        app.main_widget.on_navigation_key(key, &mut app.app_state);
     }
 
     fn start_stop(app: &mut App) {
-        if app.audio_player.has_next() || !app.audio_controls.get_is_stopped() {
-            // falls was in queue, oder aktuell am spielen
-            app.audio_player.start_stop();
-        } else {
-            app.widget_state.set_selected_widget(CLMP3Widget::Load);
-        }
+        app.audio_player.start_stop(&mut app.app_state);
     }
 }

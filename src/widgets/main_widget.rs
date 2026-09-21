@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap, io, rc::Rc, sync::Arc};
 
 use crate::{
     app_state::AppState,
-    audio::{AudioControls, SourceQueue},
+    audio::SourceQueue,
     enums::{CLMP3Widget, WidgetArea},
     widgets::{
         display::DisplayWidget, load::LoadWidget, player::PlayerWidget, queue::QueueWidget,
@@ -30,8 +30,8 @@ pub struct MainWidget {
 }
 
 impl MainWidget {
-    pub fn new(controls: Arc<AudioControls>, queue: Arc<SourceQueue>) -> MainWidget {
-        let player_widget = Rc::new(RefCell::new(PlayerWidget::new(controls)));
+    pub fn new(queue: Arc<SourceQueue>) -> MainWidget {
+        let player_widget = Rc::new(RefCell::new(PlayerWidget::new()));
         let queue_widget = Rc::new(RefCell::new(QueueWidget::new(queue.clone())));
         let load_widget = Rc::new(RefCell::new(LoadWidget::new(queue)));
 
@@ -136,7 +136,13 @@ impl MainWidget {
                 .constraints([Constraint::Fill(1), Constraint::Max(5), Constraint::Fill(1)])
                 .areas(area);
 
-            vol_slider.render(vol_area.inner(Margin { horizontal: 0, vertical: 3 }), buf);
+            vol_slider.render(
+                vol_area.inner(Margin {
+                    horizontal: 0,
+                    vertical: 3,
+                }),
+                buf,
+            );
         }
     }
 
@@ -164,10 +170,7 @@ impl StatefulWidget for &MainWidget {
 
         let [display_area, player_area] = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Fill(1),
-                Constraint::Max(8),
-            ])
+            .constraints([Constraint::Fill(1), Constraint::Max(8)])
             .areas(area);
 
         let queue_width = ((display_area.width as f32 * 0.2f32) as u16).clamp(30, 100);

@@ -6,25 +6,23 @@ use std::{
 
 use crossterm::event::KeyCode;
 use ratatui::{
-    buffer::Buffer, layout::{Constraint, Direction, Layout, Margin, Rect}, style::Style, text::Line, widgets::{Block, Gauge, LineGauge, Paragraph, StatefulWidget, Widget},
+    buffer::Buffer, layout::{Constraint, Direction, Layout, Margin, Rect}, style::Style, widgets::{LineGauge, Paragraph, StatefulWidget, Widget},
 };
 
 use crate::{app_state::AppState, audio::AudioControls, widgets::traits::InputWidget};
 
 pub struct PlayerWidget {
-    audio_controls: Arc<AudioControls>,
 }
 
 impl PlayerWidget {
-    pub fn new(controls: Arc<AudioControls>) -> PlayerWidget {
+    pub fn new() -> PlayerWidget {
         PlayerWidget {
-            audio_controls: controls,
         }
     }
 
     fn change_volume(&self, state: &mut AppState, f: Rc<dyn Fn(&mut AppState, f64)>) {
         f(state, 1.0);
-        self.audio_controls
+        state.audio_controls
             .set_volume(state.volume_state.value() as f32);
         state.set_volume_changed_time(SystemTime::now());
     }
@@ -37,9 +35,9 @@ impl StatefulWidget for &PlayerWidget {
     where
         Self: Sized,
     {
-        let [progress_area, button_area] = Layout::default()
+        let [song_area, progress_area, button_area] = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Max(3), Constraint::Max(3)])
+            .constraints([Constraint::Max(1), Constraint::Max(2), Constraint::Max(3)])
             .areas(area);
 
         let [_, button_area, volume_area] = Layout::default()
@@ -51,9 +49,9 @@ impl StatefulWidget for &PlayerWidget {
             ])
             .areas(button_area);
 
-        render_progress_bar(progress_area, buf, &self.audio_controls);
+        render_progress_bar(progress_area, buf, &state.audio_controls);
 
-        render_buttons(button_area, buf, &self.audio_controls);
+        render_buttons(button_area, buf, &state.audio_controls);
 
         render_volume(volume_area, buf, state);
     }

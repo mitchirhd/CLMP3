@@ -7,7 +7,8 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
-use crate::enums::CLMP3Event;
+use crate::app_state::AppState;
+use crate::enums::{CLMP3Event, CLMP3Widget};
 use crate::source_builder::SourceType;
 
 pub struct SourceQueue {
@@ -154,11 +155,16 @@ impl AudioPlayer {
         !self.queue.is_empty()
     }
 
-    pub fn start_stop(&mut self) {
-        if self.controls.get_is_stopped() && self.has_next() {
-            self.play_next();
+    pub fn start_stop(&mut self, state: &mut AppState) {
+        if self.has_next() || !state.audio_controls.get_is_stopped() {
+            // falls was in queue, oder aktuell am spielen
+            if self.controls.get_is_stopped() && self.has_next() {
+                self.play_next();
+            } else {
+                self.controls.set_is_paused(!self.controls.get_is_paused());
+            }
         } else {
-            self.controls.set_is_paused(!self.controls.get_is_paused());
+            state.set_selected_widget(CLMP3Widget::Load);
         }
     }
 
@@ -188,7 +194,8 @@ impl AudioPlayer {
                         let track_pos = src.inner_mut().inner_mut().inner_mut().inner_mut();
                         controls.set_position(track_pos.get_pos());
                     });
-                *self.controls.total_duration.lock().expect("Mutex acquired") = queue_source.total_duration();
+                *self.controls.total_duration.lock().expect("Mutex acquired") =
+                    queue_source.total_duration();
                 self.player.append(queue_source);
 
                 let event_tx = self.event_tx.clone();

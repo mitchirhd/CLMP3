@@ -1,12 +1,16 @@
-use std::time::SystemTime;
+use std::{sync::Arc, time::SystemTime};
 
 use ratatui::widgets::ListState;
 use tui_slider::SliderState;
 
-use crate::enums::{CLMP3Widget, WidgetArea};
+use crate::{
+    audio::AudioControls,
+    enums::{CLMP3Widget, WidgetArea},
+};
 
 #[derive(Clone)]
 pub struct AppState {
+    pub audio_controls: Arc<AudioControls>,
     selected_widget: CLMP3Widget,
     last_display_widget: CLMP3Widget,
     volume_changed_time: Option<SystemTime>,
@@ -15,14 +19,18 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new() -> AppState {
-        AppState {
+    pub fn new(audio_controls: Arc<AudioControls>) -> AppState {
+        let val = AppState {
+            audio_controls: audio_controls,
             selected_widget: CLMP3Widget::Player,
             last_display_widget: CLMP3Widget::Display,
             volume_changed_time: None,
             queue_state: ListState::default(),
             volume_state: SliderState::new(100.0, 0.0, 100.0),
-        }
+        };
+        val.audio_controls
+            .set_volume(val.volume_state.value() as f32);
+        val
     }
 
     pub fn get_selected_widget(&self) -> CLMP3Widget {
@@ -51,11 +59,5 @@ impl AppState {
             }
         }
         false
-    }
-}
-
-impl Default for AppState {
-    fn default() -> Self {
-        Self::new()
     }
 }
