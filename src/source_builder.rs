@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use lofty::{
-    file::{AudioFile, TaggedFileExt},
+    file::TaggedFileExt,
     probe::Probe,
     tag::Accessor,
 };

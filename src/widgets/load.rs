@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::widgets::{Widget, WidgetRef};
 use ratatui_explorer::{FileExplorer, FileExplorerBuilder, Input, Theme};
 
@@ -69,7 +69,7 @@ impl Widget for &LoadWidget {
 }
 
 impl InputWidget for LoadWidget {
-    fn on_input(&mut self, key: KeyCode, _state: &mut AppState) {
+    fn on_input(&mut self, _modifier: KeyModifiers, key: KeyCode, _state: &mut AppState) {
         let input = match key {
             KeyCode::Backspace => Input::Left,
             KeyCode::Left => Input::Left,

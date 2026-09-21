@@ -10,7 +10,7 @@ use crate::{
     },
 };
 
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
     DefaultTerminal,
     buffer::Buffer,
@@ -49,9 +49,9 @@ impl MainWidget {
         }
     }
 
-    pub fn on_navigation_key(&mut self, key: KeyCode, state: &mut AppState) {
+    pub fn on_navigation_key(&mut self, modifier: KeyModifiers, key: KeyCode, state: &mut AppState) {
         match self.input_widgets.get(&state.get_selected_widget()) {
-            Some(widget) => widget.borrow_mut().on_input(key, state),
+            Some(widget) => widget.borrow_mut().on_input(modifier, key, state),
             None => {}
         }
     }

@@ -98,35 +98,25 @@ impl App {
             Rc::new(App::start_stop),
         );
 
-        map.insert(
-            (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Up),
-            Rc::new(|app| App::on_navigation_key(app, KeyCode::Up)),
-        );
-
-        map.insert(
-            (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Down),
-            Rc::new(|app| App::on_navigation_key(app, KeyCode::Down)),
-        );
-
-        map.insert(
-            (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Left),
-            Rc::new(|app| App::on_navigation_key(app, KeyCode::Left)),
-        );
-
-        map.insert(
-            (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Right),
-            Rc::new(|app| App::on_navigation_key(app, KeyCode::Right)),
-        );
-
-        map.insert(
-            (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Enter),
-            Rc::new(|app| App::on_navigation_key(app, KeyCode::Enter)),
-        );
-
-        map.insert(
-            (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Backspace),
-            Rc::new(|app| App::on_navigation_key(app, KeyCode::Backspace)),
-        );
+        for modifier in [
+            KeyModifiers::NONE,
+            KeyModifiers::CONTROL,
+            KeyModifiers::SHIFT,
+        ] {
+            for code in [
+                KeyCode::Up,
+                KeyCode::Down,
+                KeyCode::Left,
+                KeyCode::Right,
+                KeyCode::Enter,
+                KeyCode::Backspace,
+            ] {
+                map.insert(
+                    (KeyEventKind::Press, modifier, code),
+                    Rc::new(move |app| App::on_navigation_key(app, modifier, code)),
+                );
+            }
+        }
 
         map
     }
@@ -180,6 +170,7 @@ impl App {
     fn handle_song_ended(&mut self) {
         self.app_state.audio_controls.set_position(Duration::ZERO);
         self.app_state.audio_controls.set_metadata(None);
+        self.app_state.audio_controls.set_skip_current(false);
         self.app_state
             .audio_controls
             .set_total_duration(Duration::ZERO);
@@ -199,8 +190,8 @@ impl App {
         app.app_state.set_selected_widget(val);
     }
 
-    fn on_navigation_key(app: &mut App, key: KeyCode) {
-        app.main_widget.on_navigation_key(key, &mut app.app_state);
+    fn on_navigation_key(app: &mut App, modifier: KeyModifiers, key: KeyCode) {
+        app.main_widget.on_navigation_key(modifier, key, &mut app.app_state);
     }
 
     fn start_stop(app: &mut App) {

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
     style::Style,
     widgets::{List, StatefulWidget},
@@ -42,7 +42,12 @@ impl StatefulWidget for &QueueWidget {
 }
 
 impl InputWidget for QueueWidget {
-    fn on_input(&mut self, key: crossterm::event::KeyCode, state: &mut AppState) {
+    fn on_input(
+        &mut self,
+        _modifier: KeyModifiers,
+        key: crossterm::event::KeyCode,
+        state: &mut AppState,
+    ) {
         match key {
             KeyCode::Down => state.queue_state.select_next(),
             KeyCode::Up => state.queue_state.select_previous(),

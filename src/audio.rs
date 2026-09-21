@@ -55,6 +55,7 @@ pub struct AudioControls {
     current_metadata: Mutex<Option<Metadata>>,
     total_duration: Mutex<Option<Duration>>,
     position: Mutex<Duration>,
+    skip_current: AtomicBool,
 }
 
 impl AudioControls {
@@ -66,6 +67,7 @@ impl AudioControls {
             current_metadata: Mutex::new(None),
             total_duration: Mutex::new(None),
             position: Mutex::new(Duration::ZERO),
+            skip_current: AtomicBool::new(false),
         }
     }
 
@@ -119,6 +121,14 @@ impl AudioControls {
     pub fn set_metadata(&self, metadata: Option<Metadata>) {
         *self.current_metadata.lock().expect("Mutex acquired") = metadata;
     }
+
+    pub fn get_skip_current(&self) -> bool {
+        self.skip_current.load(Ordering::Relaxed)
+    }
+
+    pub fn set_skip_current(&self, val: bool) {
+        self.skip_current.store(val, Ordering::Relaxed);
+    }
 }
 
 pub struct AudioPlayer {
@@ -158,7 +168,8 @@ impl AudioPlayer {
         match path.extension() {
             Some(ext) => matches!(
                 ext.to_str().unwrap_or_default(),
-                "mp3" | "wav" | "flac" | "ogg" | "aac" | "m4a"
+                // "mp3" | "wav" | "flac" | "ogg" | "aac" | "m4a"
+                "mp3" | "wav" | "flac" | "aac" | "m4a"
             ),
             None => false,
         }
@@ -200,6 +211,11 @@ impl AudioPlayer {
                         } else {
                             let paused = controls.get_is_paused();
                             src.set_paused(paused);
+                        }
+
+                        let skippable = src.inner_mut().inner_mut();
+                        if controls.get_skip_current() {
+                            skippable.skip();
                         }
 
                         let amp = src.inner_mut().inner_mut().inner_mut();
