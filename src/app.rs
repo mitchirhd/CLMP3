@@ -179,6 +179,7 @@ impl App {
 
     fn handle_song_ended(&mut self) {
         self.app_state.audio_controls.set_position(Duration::ZERO);
+        self.app_state.audio_controls.set_metadata(None);
         self.app_state
             .audio_controls
             .set_total_duration(Duration::ZERO);

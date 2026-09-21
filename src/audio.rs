@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use crate::app_state::AppState;
 use crate::enums::{CLMP3Event, CLMP3Widget};
-use crate::source_builder::SourceType;
+use crate::source_builder::{Metadata, SourceType};
 
 pub struct SourceQueue {
     queue: RwLock<VecDeque<SourceType>>,
@@ -52,6 +52,7 @@ pub struct AudioControls {
     is_stopped: AtomicBool,
     is_paused: AtomicBool,
     volume: Mutex<f32>,
+    current_metadata: Mutex<Option<Metadata>>,
     total_duration: Mutex<Option<Duration>>,
     position: Mutex<Duration>,
 }
@@ -62,6 +63,7 @@ impl AudioControls {
             is_stopped: AtomicBool::new(true),
             is_paused: AtomicBool::new(false),
             volume: Mutex::new(1.0),
+            current_metadata: Mutex::new(None),
             total_duration: Mutex::new(None),
             position: Mutex::new(Duration::ZERO),
         }
@@ -105,6 +107,17 @@ impl AudioControls {
 
     pub fn set_total_duration(&self, duration: Duration) {
         *self.total_duration.lock().expect("Mutex acquired") = Some(duration);
+    }
+
+    pub fn get_metadata(&self) -> Option<Metadata> {
+        self.current_metadata
+            .lock()
+            .expect("Mutex acquired")
+            .clone()
+    }
+
+    pub fn set_metadata(&self, metadata: Option<Metadata>) {
+        *self.current_metadata.lock().expect("Mutex acquired") = metadata;
     }
 }
 
@@ -173,8 +186,9 @@ impl AudioPlayer {
         controls.set_is_stopped(false);
         match self.queue.dequeue() {
             Some(source) => {
-                let queue_source = source
-                    .build()
+                let (source_data, metadata) = source.build();
+                self.controls.set_metadata(Some(metadata));
+                let queue_source = source_data
                     .track_position()
                     .amplify(1.0)
                     .skippable()

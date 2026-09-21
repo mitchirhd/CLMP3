@@ -5,7 +5,10 @@ use ratatui::widgets::{Widget, WidgetRef};
 use ratatui_explorer::{FileExplorer, FileExplorerBuilder, Input, Theme};
 
 use crate::{
-    app_state::AppState, audio::{AudioPlayer, SourceQueue}, source_builder::SourceType, widgets::traits::InputWidget,
+    app_state::AppState,
+    audio::{AudioPlayer, SourceQueue},
+    source_builder::SourceType,
+    widgets::traits::InputWidget,
 };
 
 pub struct LoadWidget {
