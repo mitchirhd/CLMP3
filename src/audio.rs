@@ -130,17 +130,15 @@ impl AudioPlayer {
         }
     }
 
-    pub fn has_source(&self) -> bool {
+    pub fn has_next(&self) -> bool {
         !self.queue.is_empty()
     }
 
     pub fn start_stop(&mut self) {
-        if self.has_source() {
-            if self.controls.get_is_stopped() {
-                self.play_next();
-            } else {
-                self.controls.set_is_paused(!self.controls.get_is_paused());
-            }
+        if self.controls.get_is_stopped() && self.has_next() {
+            self.play_next();
+        } else {
+            self.controls.set_is_paused(!self.controls.get_is_paused());
         }
     }
 
@@ -151,7 +149,7 @@ impl AudioPlayer {
             Some(source) => {
                 let queue_source = source
                     .build()
-                    .amplify(self.controls.get_volume())
+                    .amplify(1.0)
                     .skippable()
                     .stoppable()
                     .pausable(false)
@@ -163,7 +161,10 @@ impl AudioPlayer {
                             src.set_paused(paused);
                         }
 
-                        src.inner_mut().inner_mut().inner_mut().inner_mut().amplify(controls.get_volume());
+                        src.inner_mut()
+                            .inner_mut()
+                            .inner_mut()
+                            .set_factor((controls.get_volume() / 100.0).powf(2.0));
                     });
                 self.player.append(queue_source);
 

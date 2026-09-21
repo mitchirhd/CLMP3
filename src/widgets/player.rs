@@ -1,10 +1,10 @@
-use std::sync::Arc;
+use std::{rc::Rc, sync::Arc, time::SystemTime};
 
 use crossterm::event::KeyCode;
 use ratatui::{
     buffer::Buffer,
-    layout::{Constraint, Direction, Layout, Rect},
-    widgets::{Gauge, Paragraph, Widget},
+    layout::{Constraint, Direction, Layout, Margin, Rect},
+    widgets::{Gauge, Paragraph, StatefulWidget, Widget},
 };
 
 use crate::{app_state::AppState, audio::AudioControls, widgets::traits::InputWidget};
@@ -19,45 +19,92 @@ impl PlayerWidget {
             audio_controls: controls,
         }
     }
+
+    fn change_volume(&self, state: &mut AppState, f: Rc<dyn Fn(&mut AppState, f64)>) {
+        f(state, 1.0);
+        self.audio_controls
+            .set_volume(state.volume_state.value() as f32);
+        state.set_volume_changed_time(SystemTime::now());
+    }
 }
 
-impl Widget for &PlayerWidget {
-    fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer)
+impl StatefulWidget for &PlayerWidget {
+    type State = AppState;
+
+    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State)
     where
         Self: Sized,
     {
         let [progress_area, button_area] = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .constraints([Constraint::Max(3), Constraint::Max(3)])
             .areas(area);
+
+        let [_, button_area, volume_area] = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Fill(1),
+                Constraint::Fill(1),
+                Constraint::Fill(1),
+            ])
+            .areas(button_area);
 
         let progress_bar = Gauge::default().percent(50);
 
-        let button_area = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Ratio(1, 3),
-                Constraint::Ratio(1, 3),
-                Constraint::Ratio(1, 3),
-            ])
-            .split(button_area.centered_horizontally(Constraint::Ratio(1, 2)));
+        render_buttons(button_area, buf, self.audio_controls.clone());
 
-        let stopped = self.audio_controls.get_is_stopped();
-        let paused = self.audio_controls.get_is_paused();
-        let play_pause_symbol = if stopped || paused { "▶" } else { "⏸" };
-
-        render_button("⏮", button_area[0], buf);
-        render_button(play_pause_symbol, button_area[1], buf);
-        render_button("⏭", button_area[2], buf);
+        render_volume(volume_area, buf, state);
     }
+}
+
+fn render_buttons(area: Rect, buf: &mut Buffer, controls: Arc<AudioControls>) {
+    let button_area = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Fill(1),
+            Constraint::Fill(1),
+            Constraint::Fill(1),
+        ])
+        .split(area.centered_horizontally(Constraint::Ratio(1, 2)));
+
+    let stopped = controls.get_is_stopped();
+    let paused = controls.get_is_paused();
+    let play_pause_symbol = if stopped || paused { "▶" } else { "⏸" };
+
+    render_button("⏮", button_area[0], buf);
+    render_button(play_pause_symbol, button_area[1], buf);
+    render_button("⏭", button_area[2], buf);
 }
 
 fn render_button(label: &str, area: Rect, buf: &mut Buffer) {
     Paragraph::new(label).centered().render(area, buf);
 }
 
+fn render_volume(area: Rect, buf: &mut Buffer, state: &mut AppState) {
+    let mut icon = "🔈";
+    if state.volume_state.value() > 66.6 {
+        icon = "🔊";
+    } else if state.volume_state.value() > 33.3 {
+        icon = "🔉"
+    }
+
+    let text = format!("{icon} {}%", state.volume_state.value());
+
+    Paragraph::new(text)
+        .right_aligned()
+        .render(area.inner(Margin::new(3, 0)), buf);
+}
+
 impl InputWidget for PlayerWidget {
     fn on_input(&mut self, key: KeyCode, state: &mut AppState) {
-        // todo!()
+        match key {
+            KeyCode::Up => {
+                self.change_volume(state, Rc::new(|s, step| s.volume_state.increase(step)));
+            }
+            KeyCode::Down => {
+                self.change_volume(state, Rc::new(|s, step| s.volume_state.decrease(step)));
+            }
+            _ => {}
+        }
     }
 }

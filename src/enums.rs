@@ -3,7 +3,7 @@ use crossterm::event::KeyEvent;
 pub enum CLMP3Event {
     KeyInput(KeyEvent),
     // MouseInput(MouseEvent),
-    Resize,
+    Redraw,
     SongEnded,
 }
 

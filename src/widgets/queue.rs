@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crossterm::event::KeyCode;
 use ratatui::{
     style::Style,
-    widgets::{List, ListState, StatefulWidget},
+    widgets::{List, StatefulWidget},
 };
 
 use crate::{app_state::AppState, audio::SourceQueue, widgets::traits::InputWidget};
@@ -19,13 +19,13 @@ impl QueueWidget {
 }
 
 impl StatefulWidget for &QueueWidget {
-    type State = ListState;
+    type State = AppState;
 
     fn render(
         self,
         area: ratatui::prelude::Rect,
         buf: &mut ratatui::prelude::Buffer,
-        state: &mut Self::State,
+        state: &mut AppState,
     ) {
         let items = self.queue.as_vec().into_iter().map(|s| match s {
             crate::source_builder::SourceType::SineWave(freq, _) => format!("Sine {freq}"),
@@ -37,7 +37,7 @@ impl StatefulWidget for &QueueWidget {
             .highlight_symbol(">>")
             .repeat_highlight_symbol(true);
 
-        StatefulWidget::render(list, area, buf, state);
+        StatefulWidget::render(list, area, buf, &mut state.queue_state);
     }
 }
 

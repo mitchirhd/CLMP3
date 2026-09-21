@@ -1,10 +1,4 @@
-use std::{
-    cell::{Cell, RefCell},
-    collections::HashMap,
-    io,
-    rc::Rc,
-    sync::Arc,
-};
+use std::{cell::RefCell, collections::HashMap, io, rc::Rc, sync::Arc};
 
 use crate::{
     app_state::AppState,
@@ -19,40 +13,15 @@ use crate::{
 use crossterm::event::KeyCode;
 use ratatui::{
     DefaultTerminal,
-    layout::{Constraint, Direction, Layout, Rect},
+    buffer::Buffer,
+    layout::{Constraint, Direction, Layout, Margin, Rect},
     symbols::border,
     text::Line,
-    widgets::{Block, ListState, StatefulWidget, Widget},
+    widgets::{Block, StatefulWidget, Widget},
 };
-
-pub struct RenderSettings {
-    selected_widget: Cell<CLMP3Widget>,
-    last_display_widget: Cell<CLMP3Widget>,
-}
-
-impl RenderSettings {
-    pub fn get_selected_widget(&self) -> CLMP3Widget {
-        self.selected_widget.get()
-    }
-
-    pub fn set_selected_widget(&self, val: CLMP3Widget) {
-        self.selected_widget.set(val);
-        if val.get_area() == WidgetArea::Display {
-            self.set_last_display_widget(val);
-        }
-    }
-
-    pub fn get_last_display_widget(&self) -> CLMP3Widget {
-        self.last_display_widget.get()
-    }
-
-    fn set_last_display_widget(&self, val: CLMP3Widget) {
-        self.last_display_widget.set(val);
-    }
-}
+use tui_slider::{Slider, SliderOrientation};
 
 pub struct MainWidget {
-    render_settings: Rc<RenderSettings>,
     input_widgets: HashMap<CLMP3Widget, Rc<RefCell<dyn InputWidget>>>,
     player_widget: Rc<RefCell<PlayerWidget>>,
     display_widget: Rc<RefCell<DisplayWidget>>,
@@ -61,15 +30,7 @@ pub struct MainWidget {
 }
 
 impl MainWidget {
-    pub fn new(
-        controls: Arc<AudioControls>,
-        queue: Arc<SourceQueue>,
-    ) -> (MainWidget, Rc<RenderSettings>) {
-        let render_settings = Rc::new(RenderSettings {
-            selected_widget: Cell::new(CLMP3Widget::Player),
-            last_display_widget: Cell::new(CLMP3Widget::Display),
-        });
-
+    pub fn new(controls: Arc<AudioControls>, queue: Arc<SourceQueue>) -> MainWidget {
         let player_widget = Rc::new(RefCell::new(PlayerWidget::new(controls)));
         let queue_widget = Rc::new(RefCell::new(QueueWidget::new(queue.clone())));
         let load_widget = Rc::new(RefCell::new(LoadWidget::new(queue)));
@@ -79,26 +40,19 @@ impl MainWidget {
         input_widgets.insert(CLMP3Widget::Queue, queue_widget.clone());
         input_widgets.insert(CLMP3Widget::Load, load_widget.clone());
 
-        (
-            MainWidget {
-                render_settings: render_settings.clone(),
-                input_widgets: input_widgets,
-                player_widget: player_widget,
-                display_widget: Rc::new(RefCell::new(DisplayWidget::new())),
-                queue_widget: queue_widget,
-                load_widget: load_widget,
-            },
-            render_settings,
-        )
+        MainWidget {
+            input_widgets: input_widgets,
+            player_widget: player_widget,
+            display_widget: Rc::new(RefCell::new(DisplayWidget::new())),
+            queue_widget: queue_widget,
+            load_widget: load_widget,
+        }
     }
 
     pub fn on_navigation_key(&mut self, key: KeyCode, state: &mut AppState) {
-        match self
-            .input_widgets
-            .get(&self.render_settings.get_selected_widget())
-        {
+        match self.input_widgets.get(&state.get_selected_widget()) {
             Some(widget) => widget.borrow_mut().on_input(key, state),
-            None => {},
+            None => {}
         }
     }
 
@@ -107,14 +61,19 @@ impl MainWidget {
         Ok(())
     }
 
-    fn render_display_area(&self, display_area: Rect, buf: &mut ratatui::prelude::Buffer) {
+    fn render_display_area(
+        &self,
+        display_area: Rect,
+        buf: &mut ratatui::prelude::Buffer,
+        state: &mut AppState,
+    ) {
         let display_block = Block::bordered()
             .title(Line::from(" Display Area "))
-            .border_set(self.get_thickness(WidgetArea::Display));
+            .border_set(self.get_thickness(WidgetArea::Display, state));
 
         let inner = display_block.inner(display_area);
 
-        match self.render_settings.get_last_display_widget() {
+        match state.get_last_display_widget() {
             CLMP3Widget::Display => self.display_widget.borrow().render(inner, buf),
             CLMP3Widget::Load => self.load_widget.borrow().render(inner, buf),
             _ => {}
@@ -127,13 +86,13 @@ impl MainWidget {
         &self,
         queue_area: Rect,
         buf: &mut ratatui::prelude::Buffer,
-        state: &mut ListState,
+        state: &mut AppState,
     ) {
         let queue_block = Block::bordered()
             .title(Line::from(" Queue Area "))
-            .border_set(self.get_thickness(WidgetArea::Queue));
+            .border_set(self.get_thickness(WidgetArea::Queue, state));
 
-        if self.render_settings.get_selected_widget() != CLMP3Widget::Queue {}
+        if state.get_selected_widget() != CLMP3Widget::Queue {}
 
         self.queue_widget
             .borrow_mut()
@@ -142,20 +101,47 @@ impl MainWidget {
         queue_block.render(queue_area, buf);
     }
 
-    fn render_player_area(&self, player_area: Rect, buf: &mut ratatui::prelude::Buffer) {
+    fn render_player_area(
+        &self,
+        player_area: Rect,
+        buf: &mut ratatui::prelude::Buffer,
+        state: &mut AppState,
+    ) {
         let player_block = Block::bordered()
             .title(Line::from(" Player Area "))
-            .border_set(self.get_thickness(WidgetArea::Player));
+            .border_set(self.get_thickness(WidgetArea::Player, state));
 
         self.player_widget
             .borrow_mut()
-            .render(player_block.inner(player_area), buf);
+            .render(player_block.inner(player_area), buf, state);
 
         player_block.render(player_area, buf);
     }
 
-    fn get_thickness(&self, check: WidgetArea) -> border::Set<'static> {
-        if self.render_settings.get_selected_widget().get_area() == check {
+    fn render_volume_slider(&self, area: Rect, buf: &mut Buffer, state: &mut AppState) {
+        if state.draw_volume_slider() {
+            let vol_block = Block::bordered()
+                .title(Line::from("Vol"))
+                .border_set(border::PLAIN);
+
+            let vol_slider = Slider::from_state(&state.volume_state)
+                .orientation(SliderOrientation::Vertical)
+                .filled_symbol("█")
+                .empty_symbol("░")
+                .handle_symbol("█")
+                .block(vol_block);
+
+            let [_, vol_area, _] = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Fill(1), Constraint::Max(5), Constraint::Fill(1)])
+                .areas(area);
+
+            vol_slider.render(vol_area.inner(Margin { horizontal: 0, vertical: 3 }), buf);
+        }
+    }
+
+    fn get_thickness(&self, check: WidgetArea, state: &AppState) -> border::Set<'static> {
+        if state.get_selected_widget().get_area() == check {
             border::THICK
         } else {
             border::PLAIN
@@ -174,13 +160,13 @@ impl StatefulWidget for &MainWidget {
     ) where
         Self: Sized,
     {
-        let player_height = ((area.height as f32 * 0.15f32) as u16).clamp(10, 50);
+        // let player_height = ((area.height as f32 * 0.15f32) as u16).clamp(10, 50);
 
         let [display_area, player_area] = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Percentage(100),
-                Constraint::Length(player_height),
+                Constraint::Fill(1),
+                Constraint::Max(8),
             ])
             .areas(area);
 
@@ -191,8 +177,9 @@ impl StatefulWidget for &MainWidget {
             .constraints([Constraint::Percentage(100), Constraint::Length(queue_width)])
             .areas(display_area);
 
-        self.render_display_area(display_area, buf);
-        self.render_queue_area(queue_area, buf, &mut state.queue_state);
-        self.render_player_area(player_area, buf);
+        self.render_display_area(display_area, buf, state);
+        self.render_queue_area(queue_area, buf, state);
+        self.render_player_area(player_area, buf, state);
+        self.render_volume_slider(area, buf, state);
     }
 }
