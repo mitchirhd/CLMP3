@@ -51,6 +51,8 @@ pub struct AudioControls {
     is_stopped: AtomicBool,
     is_paused: AtomicBool,
     volume: Mutex<f32>,
+    total_duration: Mutex<Option<Duration>>,
+    position: Mutex<Duration>,
 }
 
 impl AudioControls {
@@ -59,6 +61,8 @@ impl AudioControls {
             is_stopped: AtomicBool::new(true),
             is_paused: AtomicBool::new(false),
             volume: Mutex::new(1.0),
+            total_duration: Mutex::new(None),
+            position: Mutex::new(Duration::ZERO),
         }
     }
 
@@ -84,6 +88,22 @@ impl AudioControls {
 
     pub fn set_volume(&self, val: f32) {
         *self.volume.lock().expect("Mutex acquired") = val;
+    }
+
+    pub fn get_position(&self) -> Duration {
+        *self.position.lock().expect("Mutex acquired")
+    }
+
+    pub fn set_position(&self, pos: Duration) {
+        *self.position.lock().expect("Mutex acquired") = pos;
+    }
+
+    pub fn get_total_duration(&self) -> Option<Duration> {
+        *self.total_duration.lock().expect("Mutex acquired")
+    }
+
+    pub fn set_total_duration(&self, duration: Duration) {
+        *self.total_duration.lock().expect("Mutex acquired") = Some(duration);
     }
 }
 
@@ -149,6 +169,7 @@ impl AudioPlayer {
             Some(source) => {
                 let queue_source = source
                     .build()
+                    .track_position()
                     .amplify(1.0)
                     .skippable()
                     .stoppable()
@@ -161,11 +182,13 @@ impl AudioPlayer {
                             src.set_paused(paused);
                         }
 
-                        src.inner_mut()
-                            .inner_mut()
-                            .inner_mut()
-                            .set_factor((controls.get_volume() / 100.0).powf(2.0));
+                        let amp = src.inner_mut().inner_mut().inner_mut();
+                        amp.set_factor((controls.get_volume() / 100.0).powf(2.0));
+
+                        let track_pos = src.inner_mut().inner_mut().inner_mut().inner_mut();
+                        controls.set_position(track_pos.get_pos());
                     });
+                *self.controls.total_duration.lock().expect("Mutex acquired") = queue_source.total_duration();
                 self.player.append(queue_source);
 
                 let event_tx = self.event_tx.clone();

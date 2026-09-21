@@ -189,6 +189,8 @@ impl App {
     }
 
     fn handle_song_ended(&mut self) {
+        self.audio_controls.set_position(Duration::ZERO);
+        self.audio_controls.set_total_duration(Duration::ZERO);
         if self.audio_player.has_next() {
             // falls was in queue
             self.audio_player.play_next();

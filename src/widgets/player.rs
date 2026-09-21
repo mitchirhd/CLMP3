@@ -1,10 +1,12 @@
-use std::{rc::Rc, sync::Arc, time::SystemTime};
+use std::{
+    rc::Rc,
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
 
 use crossterm::event::KeyCode;
 use ratatui::{
-    buffer::Buffer,
-    layout::{Constraint, Direction, Layout, Margin, Rect},
-    widgets::{Gauge, Paragraph, StatefulWidget, Widget},
+    buffer::Buffer, layout::{Constraint, Direction, Layout, Margin, Rect}, style::Style, text::Line, widgets::{Block, Gauge, LineGauge, Paragraph, StatefulWidget, Widget},
 };
 
 use crate::{app_state::AppState, audio::AudioControls, widgets::traits::InputWidget};
@@ -49,15 +51,53 @@ impl StatefulWidget for &PlayerWidget {
             ])
             .areas(button_area);
 
-        let progress_bar = Gauge::default().percent(50);
+        render_progress_bar(progress_area, buf, &self.audio_controls);
 
-        render_buttons(button_area, buf, self.audio_controls.clone());
+        render_buttons(button_area, buf, &self.audio_controls);
 
         render_volume(volume_area, buf, state);
     }
 }
 
-fn render_buttons(area: Rect, buf: &mut Buffer, controls: Arc<AudioControls>) {
+fn render_progress_bar(area: Rect, buf: &mut Buffer, controls: &Arc<AudioControls>) {
+    let (ratio, text) = get_gauge_data(controls);
+
+    let gauge = LineGauge::default()
+        .ratio(ratio)
+        .label(text)
+        .filled_style(Style::new().gray().on_white())
+        .unfilled_style(Style::new().white());
+    gauge.render(area.inner(Margin::new(1, 0)), buf);
+}
+
+fn get_gauge_data(controls: &Arc<AudioControls>) -> (f64, String) {
+    match controls.get_total_duration() {
+        Some(total) => {
+            let total_secs = total.as_secs_f64();
+            if total_secs != 0.0 {
+                let ratio = controls.get_position().as_secs_f64() / total_secs;
+                let text = format!(
+                    "{}/{}",
+                    calculate_time_str(&controls.get_position()),
+                    calculate_time_str(&total)
+                );
+                (ratio, text)
+            } else {
+                (0.0, String::from("00:00/00:00"))
+            }
+        }
+        None => (0.0, String::from("00:00/00:00")),
+    }
+}
+
+fn calculate_time_str(duration: &Duration) -> String {
+    let total_secs = duration.as_secs();
+    let min = total_secs / 60;
+    let secs = total_secs % 60;
+    format!("{:02}:{:02}", min, secs)
+}
+
+fn render_buttons(area: Rect, buf: &mut Buffer, controls: &Arc<AudioControls>) {
     let button_area = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
