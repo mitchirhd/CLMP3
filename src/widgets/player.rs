@@ -4,7 +4,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use crossterm::event::{Event::Key, KeyCode, KeyModifiers};
+use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Margin, Rect},
@@ -162,7 +162,7 @@ fn render_volume(area: Rect, buf: &mut Buffer, state: &mut AppState) {
 }
 
 impl InputWidget for PlayerWidget {
-    fn on_input(&mut self, modifier: KeyModifiers, key: KeyCode, state: &mut AppState) {
+    fn on_input(&mut self, _modifier: KeyModifiers, key: KeyCode, state: &mut AppState) {
         match key {
             KeyCode::Up => {
                 self.change_volume(state, Rc::new(|s, step| s.volume_state.increase(step)));
@@ -172,6 +172,9 @@ impl InputWidget for PlayerWidget {
             }
             KeyCode::Right => {
                 state.audio_controls.set_skip_current(true);
+            }
+            KeyCode::Left => {
+                state.audio_controls.set_previous(true);
             }
             _ => {}
         }

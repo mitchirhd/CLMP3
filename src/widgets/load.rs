@@ -1,23 +1,18 @@
-use std::sync::Arc;
-
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::widgets::{Widget, WidgetRef};
 use ratatui_explorer::{FileExplorer, FileExplorerBuilder, Input, Theme};
 
 use crate::{
-    app_state::AppState,
-    audio::{AudioPlayer, SourceQueue},
-    source_builder::SourceType,
+    app_state::AppState, audio::AudioPlayer, source_builder::SourceType,
     widgets::traits::InputWidget,
 };
 
 pub struct LoadWidget {
     file_explorer: FileExplorer,
-    queue: Arc<SourceQueue>,
 }
 
 impl LoadWidget {
-    pub fn new(queue: Arc<SourceQueue>) -> LoadWidget {
+    pub fn new() -> LoadWidget {
         let mut file_explorer =
             FileExplorerBuilder::build_with_theme(Theme::default().add_default_title())
                 .expect("Could not create file explorer");
@@ -32,29 +27,26 @@ impl LoadWidget {
             })
             .unwrap();
 
-        LoadWidget {
-            file_explorer,
-            queue: queue,
-        }
+        LoadWidget { file_explorer }
     }
 
-    fn on_enter(&mut self) -> Input {
+    fn on_enter(&mut self, state: &mut AppState) -> Input {
         if self.file_explorer.current().is_dir {
             Input::Right
         } else {
-            self.load_current();
+            self.load_current(state);
             Input::None
         }
     }
 
-    fn load_current(&mut self) {
+    fn load_current(&mut self, state: &mut AppState) {
         let current = self.file_explorer.current();
         if !current.is_file() {
             return;
         }
 
         if AudioPlayer::can_play(&current.path) {
-            self.queue.enqueue(SourceType::File(current.clone()));
+            state.queue.enqueue(SourceType::File(current.clone()));
         }
     }
 }
@@ -69,11 +61,11 @@ impl Widget for &LoadWidget {
 }
 
 impl InputWidget for LoadWidget {
-    fn on_input(&mut self, _modifier: KeyModifiers, key: KeyCode, _state: &mut AppState) {
+    fn on_input(&mut self, _modifier: KeyModifiers, key: KeyCode, state: &mut AppState) {
         let input = match key {
             KeyCode::Backspace => Input::Left,
             KeyCode::Left => Input::Left,
-            KeyCode::Right => self.on_enter(),
+            KeyCode::Right => self.on_enter(state),
             KeyCode::Up => Input::Up,
             KeyCode::Down => Input::Down,
             KeyCode::Home => Input::Home,
@@ -81,7 +73,7 @@ impl InputWidget for LoadWidget {
             KeyCode::PageUp => Input::PageUp,
             KeyCode::PageDown => Input::PageDown,
             KeyCode::Tab => Input::None,
-            KeyCode::Enter => self.on_enter(),
+            KeyCode::Enter => self.on_enter(state),
             _ => Input::None,
         };
 

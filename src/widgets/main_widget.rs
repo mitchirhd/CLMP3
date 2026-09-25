@@ -1,8 +1,7 @@
-use std::{cell::RefCell, collections::HashMap, io, rc::Rc, sync::Arc};
+use std::{cell::RefCell, collections::HashMap, io, rc::Rc};
 
 use crate::{
     app_state::AppState,
-    audio::SourceQueue,
     enums::{CLMP3Widget, WidgetArea},
     widgets::{
         display::DisplayWidget, load::LoadWidget, player::PlayerWidget, queue::QueueWidget,
@@ -30,10 +29,10 @@ pub struct MainWidget {
 }
 
 impl MainWidget {
-    pub fn new(queue: Arc<SourceQueue>) -> MainWidget {
+    pub fn new() -> MainWidget {
         let player_widget = Rc::new(RefCell::new(PlayerWidget::new()));
-        let queue_widget = Rc::new(RefCell::new(QueueWidget::new(queue.clone())));
-        let load_widget = Rc::new(RefCell::new(LoadWidget::new(queue)));
+        let queue_widget = Rc::new(RefCell::new(QueueWidget::new()));
+        let load_widget = Rc::new(RefCell::new(LoadWidget::new()));
 
         let mut input_widgets: HashMap<CLMP3Widget, Rc<RefCell<dyn InputWidget>>> = HashMap::new();
         input_widgets.insert(CLMP3Widget::Player, player_widget.clone());

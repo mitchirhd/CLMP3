@@ -4,13 +4,13 @@ use ratatui::widgets::ListState;
 use tui_slider::SliderState;
 
 use crate::{
-    audio::AudioControls,
-    enums::{CLMP3Widget, WidgetArea},
+    audio::{AudioControls, SourceQueue}, enums::{CLMP3Widget, WidgetArea},
 };
 
 #[derive(Clone)]
 pub struct AppState {
     pub audio_controls: Arc<AudioControls>,
+    pub queue: Arc<SourceQueue>,
     selected_widget: CLMP3Widget,
     last_display_widget: CLMP3Widget,
     volume_changed_time: Option<SystemTime>,
@@ -19,9 +19,10 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new(audio_controls: Arc<AudioControls>) -> AppState {
+    pub fn new(audio_controls: Arc<AudioControls>, queue: Arc<SourceQueue>) -> AppState {
         let val = AppState {
             audio_controls: audio_controls,
+            queue,
             selected_widget: CLMP3Widget::Player,
             last_display_widget: CLMP3Widget::Display,
             volume_changed_time: None,

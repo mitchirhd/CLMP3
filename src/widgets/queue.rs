@@ -1,20 +1,16 @@
-use std::sync::Arc;
-
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
     style::Style,
     widgets::{List, StatefulWidget},
 };
 
-use crate::{app_state::AppState, audio::SourceQueue, widgets::traits::InputWidget};
+use crate::{app_state::AppState, widgets::traits::InputWidget};
 
-pub struct QueueWidget {
-    queue: Arc<SourceQueue>,
-}
+pub struct QueueWidget {}
 
 impl QueueWidget {
-    pub fn new(queue: Arc<SourceQueue>) -> QueueWidget {
-        QueueWidget { queue: queue }
+    pub fn new() -> QueueWidget {
+        QueueWidget {}
     }
 }
 
@@ -27,10 +23,15 @@ impl StatefulWidget for &QueueWidget {
         buf: &mut ratatui::prelude::Buffer,
         state: &mut AppState,
     ) {
-        let items = self.queue.as_vec().into_iter().map(|s| match s {
-            crate::source_builder::SourceType::SineWave(freq, _) => format!("Sine {freq}"),
-            crate::source_builder::SourceType::File(file) => format!("{}", file.name),
-        });
+        let items = state
+            .queue
+            .prev_as_vec()
+            .into_iter()
+            .chain(state.queue.as_vec().into_iter())
+            .map(|s| match s {
+                crate::source_builder::SourceType::SineWave(freq, _) => format!("Sine {freq}"),
+                crate::source_builder::SourceType::File(file) => format!("{}", file.name),
+            });
 
         let list = List::new(items)
             .highlight_style(Style::new().reversed())

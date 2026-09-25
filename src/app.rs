@@ -47,13 +47,13 @@ impl App {
     pub fn new() -> App {
         let (event_tx, event_rx) = mpsc::channel::<CLMP3Event>();
         let (audio_player, audio_controls, queue) = AudioPlayer::new(event_tx.clone());
-        let app_state = AppState::new(audio_controls);
+        let app_state = AppState::new(audio_controls, queue);
 
         App {
             exit: false,
             event_tx: event_tx,
             event_rx: event_rx,
-            main_widget: MainWidget::new(queue),
+            main_widget: MainWidget::new(),
             app_state,
             handler_map: App::get_handler_map(),
             audio_player,
@@ -168,17 +168,25 @@ impl App {
     }
 
     fn handle_song_ended(&mut self) {
+        if self.app_state.audio_controls.get_previous() {
+            self.app_state.queue.replay();
+        } else {
+            self.app_state.queue.current_to_previous();
+        }
+
         self.app_state.audio_controls.set_position(Duration::ZERO);
         self.app_state.audio_controls.set_metadata(None);
         self.app_state.audio_controls.set_skip_current(false);
+        self.app_state.audio_controls.set_previous(false);
         self.app_state
             .audio_controls
             .set_total_duration(Duration::ZERO);
         if self.audio_player.has_next() {
             // falls was in queue
-            self.audio_player.play_next();
+            self.audio_player.play_next(&mut self.app_state);
         } else {
             self.app_state.audio_controls.set_is_stopped(true);
+            self.app_state.queue_state.select(None);
         }
     }
 
@@ -191,7 +199,8 @@ impl App {
     }
 
     fn on_navigation_key(app: &mut App, modifier: KeyModifiers, key: KeyCode) {
-        app.main_widget.on_navigation_key(modifier, key, &mut app.app_state);
+        app.main_widget
+            .on_navigation_key(modifier, key, &mut app.app_state);
     }
 
     fn start_stop(app: &mut App) {
