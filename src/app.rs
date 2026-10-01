@@ -75,22 +75,30 @@ impl App {
 
         map.insert(
             (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Char('p')),
-            Rc::new(|app| App::set_selected_widget(app, CLMP3Widget::Player)),
+            Rc::new(|app| {
+                app.app_state.set_selected_widget(CLMP3Widget::Player);
+            }),
         );
 
         map.insert(
             (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Char('d')),
-            Rc::new(|app| App::set_selected_widget(app, CLMP3Widget::Display)),
+            Rc::new(|app| {
+                app.app_state.set_selected_widget(CLMP3Widget::Display);
+            }),
         );
 
         map.insert(
             (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Char('l')),
-            Rc::new(|app| App::set_selected_widget(app, CLMP3Widget::Load)),
+            Rc::new(|app| {
+                app.app_state.set_selected_widget(CLMP3Widget::Load);
+            }),
         );
 
         map.insert(
             (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Char('q')),
-            Rc::new(|app| App::set_selected_widget(app, CLMP3Widget::Queue)),
+            Rc::new(|app| {
+                app.app_state.set_selected_widget(CLMP3Widget::Queue);
+            }),
         );
 
         map.insert(
@@ -168,34 +176,24 @@ impl App {
     }
 
     fn handle_song_ended(&mut self) {
-        if self.app_state.audio_controls.get_previous() {
-            self.app_state.queue.replay();
+        let state = &mut self.app_state;
+        if state.audio_controls.previous_requested() {
+            state.queue.replay();
         } else {
-            self.app_state.queue.current_to_previous();
+            state.queue.current_to_previous();
         }
 
-        self.app_state.audio_controls.set_position(Duration::ZERO);
-        self.app_state.audio_controls.set_metadata(None);
-        self.app_state.audio_controls.set_skip_current(false);
-        self.app_state.audio_controls.set_previous(false);
-        self.app_state
-            .audio_controls
-            .set_total_duration(Duration::ZERO);
+        state.audio_controls.reset();
         if self.audio_player.has_next() {
-            // falls was in queue
-            self.audio_player.play_next(&mut self.app_state);
+            self.audio_player.play_next(state);
         } else {
-            self.app_state.audio_controls.set_is_stopped(true);
-            self.app_state.queue_state.select(None);
+            state.audio_controls.set_is_stopped(true);
+            state.queue_state.select(None);
         }
     }
 
     fn exit_app(app: &mut App) {
         app.exit = true;
-    }
-
-    fn set_selected_widget(app: &mut App, val: CLMP3Widget) {
-        app.app_state.set_selected_widget(val);
     }
 
     fn on_navigation_key(app: &mut App, modifier: KeyModifiers, key: KeyCode) {

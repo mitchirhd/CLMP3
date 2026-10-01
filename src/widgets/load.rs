@@ -3,7 +3,9 @@ use ratatui::widgets::{Widget, WidgetRef};
 use ratatui_explorer::{FileExplorer, FileExplorerBuilder, Input, Theme};
 
 use crate::{
-    app_state::AppState, audio::AudioPlayer, source_builder::SourceType,
+    app_state::AppState,
+    audio::AudioPlayer,
+    source_builder::{Metadata, SourceId, SourceType},
     widgets::traits::InputWidget,
 };
 
@@ -34,20 +36,20 @@ impl LoadWidget {
         if self.file_explorer.current().is_dir {
             Input::Right
         } else {
-            self.load_current(state);
+            self.load_current_file(state);
             Input::None
         }
     }
 
-    fn load_current(&mut self, state: &mut AppState) {
-        let current = self.file_explorer.current();
-        if !current.is_file() {
+    fn load_current_file(&mut self, state: &mut AppState) {
+        let file = self.file_explorer.current().clone();
+        if !file.is_file() || !AudioPlayer::can_play(&file.path) {
             return;
         }
 
-        if AudioPlayer::can_play(&current.path) {
-            state.queue.enqueue(SourceType::File(current.clone()));
-        }
+        state.queue.enqueue(SourceType::File(file.clone()));
+        let id = SourceId::File(file.path.clone());
+        state.spawn_metadata_load(id, move || Metadata::from_file(&file));
     }
 }
 

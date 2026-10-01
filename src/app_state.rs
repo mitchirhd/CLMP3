@@ -1,10 +1,17 @@
-use std::{sync::Arc, time::SystemTime};
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+    thread,
+    time::SystemTime,
+};
 
 use ratatui::widgets::ListState;
 use tui_slider::SliderState;
 
 use crate::{
-    audio::{AudioControls, SourceQueue}, enums::{CLMP3Widget, WidgetArea},
+    audio::{AudioControls, SourceQueue},
+    enums::{CLMP3Widget, WidgetArea},
+    source_builder::{Metadata, SourceId, SourceType},
 };
 
 #[derive(Clone)]
@@ -16,6 +23,7 @@ pub struct AppState {
     volume_changed_time: Option<SystemTime>,
     pub queue_state: ListState,
     pub volume_state: SliderState,
+    pub metadata_map: Arc<RwLock<HashMap<SourceId, Arc<Metadata>>>>,
 }
 
 impl AppState {
@@ -28,6 +36,7 @@ impl AppState {
             volume_changed_time: None,
             queue_state: ListState::default(),
             volume_state: SliderState::new(100.0, 0.0, 100.0),
+            metadata_map: Arc::new(RwLock::new(HashMap::new())),
         };
         val.audio_controls
             .set_volume(val.volume_state.value() as f32);
@@ -42,6 +51,10 @@ impl AppState {
         self.selected_widget = val;
         if val.get_area() == WidgetArea::Display {
             self.last_display_widget = val;
+        }
+        if val != CLMP3Widget::Queue {
+            self.queue_state.select(None);
+            self.update_queue_state();
         }
     }
 
@@ -60,5 +73,28 @@ impl AppState {
             }
         }
         false
+    }
+
+    pub fn get_metadata(&self, source: &SourceType) -> Option<Arc<Metadata>> {
+        let id = source.id()?;
+        self.metadata_map.read().unwrap().get(&id).cloned()
+    }
+
+    pub fn spawn_metadata_load<F>(&self, id: SourceId, load: F)
+    where
+        F: FnOnce() -> Metadata + Send + 'static,
+    {
+        if self.metadata_map.read().unwrap().contains_key(&id) {
+            return;
+        }
+        let map = Arc::clone(&self.metadata_map);
+        thread::spawn(move || {
+            let metadata = load();
+            map.write().unwrap().insert(id, Arc::new(metadata));
+        });
+    }
+
+    pub fn update_queue_state(&mut self){
+        *self.queue_state.offset_mut() = self.queue.prev_len().saturating_sub(5)
     }
 }

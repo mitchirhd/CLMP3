@@ -14,6 +14,7 @@ use ratatui::{
     DefaultTerminal,
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Margin, Rect},
+    style::Style,
     symbols::border,
     text::Line,
     widgets::{Block, StatefulWidget, Widget},
@@ -48,7 +49,12 @@ impl MainWidget {
         }
     }
 
-    pub fn on_navigation_key(&mut self, modifier: KeyModifiers, key: KeyCode, state: &mut AppState) {
+    pub fn on_navigation_key(
+        &mut self,
+        modifier: KeyModifiers,
+        key: KeyCode,
+        state: &mut AppState,
+    ) {
         match self.input_widgets.get(&state.get_selected_widget()) {
             Some(widget) => widget.borrow_mut().on_input(modifier, key, state),
             None => {}
@@ -66,9 +72,11 @@ impl MainWidget {
         buf: &mut ratatui::prelude::Buffer,
         state: &mut AppState,
     ) {
+        let (thickness, style) = self.get_thickness(WidgetArea::Display, state);
         let display_block = Block::bordered()
             .title(Line::from(" Display Area "))
-            .border_set(self.get_thickness(WidgetArea::Display, state));
+            .border_set(thickness)
+            .border_style(style);
 
         let inner = display_block.inner(display_area);
 
@@ -87,9 +95,11 @@ impl MainWidget {
         buf: &mut ratatui::prelude::Buffer,
         state: &mut AppState,
     ) {
+        let (thickness, style) = self.get_thickness(WidgetArea::Queue, state);
         let queue_block = Block::bordered()
             .title(Line::from(" Queue Area "))
-            .border_set(self.get_thickness(WidgetArea::Queue, state));
+            .border_set(thickness)
+            .border_style(style);
 
         if state.get_selected_widget() != CLMP3Widget::Queue {}
 
@@ -106,9 +116,11 @@ impl MainWidget {
         buf: &mut ratatui::prelude::Buffer,
         state: &mut AppState,
     ) {
+        let (thickness, style) = self.get_thickness(WidgetArea::Player, state);
         let player_block = Block::bordered()
             .title(Line::from(" Player Area "))
-            .border_set(self.get_thickness(WidgetArea::Player, state));
+            .border_set(thickness)
+            .border_style(style);
 
         self.player_widget
             .borrow_mut()
@@ -145,11 +157,11 @@ impl MainWidget {
         }
     }
 
-    fn get_thickness(&self, check: WidgetArea, state: &AppState) -> border::Set<'static> {
+    fn get_thickness(&self, check: WidgetArea, state: &AppState) -> (border::Set<'static>, Style) {
         if state.get_selected_widget().get_area() == check {
-            border::THICK
+            (border::THICK, Style::default().blue())
         } else {
-            border::PLAIN
+            (border::PLAIN, Style::default().white())
         }
     }
 }

@@ -55,14 +55,14 @@ impl StatefulWidget for &PlayerWidget {
             ])
             .areas(button_area);
 
-        render_title_bar(title_area, buf, state.audio_controls.get_metadata());
+        render_title_bar(title_area, buf, state.audio_controls.get_current_metadata());
         render_progress_bar(progress_area, buf, &state.audio_controls);
         render_buttons(button_area, buf, &state.audio_controls);
         render_volume(volume_area, buf, state);
     }
 }
 
-fn render_title_bar(area: Rect, buf: &mut Buffer, metadata: Option<Metadata>) {
+fn render_title_bar(area: Rect, buf: &mut Buffer, metadata: Option<Arc<Metadata>>) {
     let Some(metadata) = metadata else { return };
 
     let mut delimiter1 = Span::default();
@@ -76,11 +76,11 @@ fn render_title_bar(area: Rect, buf: &mut Buffer, metadata: Option<Metadata>) {
     }
 
     let line = Line::from_iter([
-        Span::from(metadata.title),
+        Span::from(&metadata.title),
         delimiter1,
-        Span::from(metadata.artist.unwrap_or(String::from(""))),
+        Span::from(metadata.artist.clone().unwrap_or(String::from(""))),
         delimiter2,
-        Span::from(metadata.album.unwrap_or(String::from(""))),
+        Span::from(metadata.album.clone().unwrap_or(String::from(""))),
     ]);
     line.render(area.inner(Margin::new(1, 0)), buf);
 }
@@ -174,7 +174,7 @@ impl InputWidget for PlayerWidget {
                 state.audio_controls.set_skip_current(true);
             }
             KeyCode::Left => {
-                state.audio_controls.set_previous(true);
+                state.audio_controls.set_previous_requested(true);
             }
             _ => {}
         }

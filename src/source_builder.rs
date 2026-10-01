@@ -1,10 +1,6 @@
-use std::time::Duration;
+use std::{path::PathBuf, time::Duration};
 
-use lofty::{
-    file::TaggedFileExt,
-    probe::Probe,
-    tag::Accessor,
-};
+use lofty::{file::TaggedFileExt, probe::Probe, tag::Accessor};
 use ratatui_explorer::File;
 use rodio::{Decoder, Source, source::SineWave};
 
@@ -17,21 +13,43 @@ pub enum SourceType {
 }
 
 impl SourceType {
-    pub fn build(&self) -> (Box<dyn Source<Item = f32> + Send>, Metadata) {
+    pub fn build(&self) -> Box<dyn Source<Item = f32> + Send> {
         match self {
-            SourceType::SineWave(freq, duration) => (
-                Box::new(SineWave::new(*freq).take_duration(*duration)),
-                Metadata::new(String::from("Sinewave"), None, None),
-            ),
-            SourceType::File(file) => (
-                Box::new(
-                    Decoder::try_from(StdFile::open(&file.path).expect("Could not open file"))
-                        .expect("Could not decode audio"),
-                ),
-                Metadata::from_file(&file),
+            SourceType::SineWave(freq, duration) => {
+                Box::new(SineWave::new(*freq).take_duration(*duration))
+            }
+            SourceType::File(file) => Box::new(
+                Decoder::try_from(StdFile::open(&file.path).expect("Could not open file"))
+                    .expect("Could not decode audio"),
             ),
         }
     }
+
+    pub fn label(&self, metadata: Option<&Metadata>) -> String {
+        match self {
+            SourceType::SineWave(freq, _) => format!("Sine {freq}"),
+            SourceType::File(file) => match metadata {
+                Some(m) => format!(
+                    "{} - {}",
+                    m.title,
+                    m.artist.as_deref().unwrap_or("unknown")
+                ),
+                None => file.name.to_string(),
+            },
+        }
+    }
+
+    pub fn id(&self) -> Option<SourceId> {
+        match self {
+            SourceType::SineWave(_, _) => None,
+            SourceType::File(file) => Some(SourceId::File(file.path.clone())),
+        }
+    }
+}
+
+#[derive(Hash, PartialEq, Eq, Clone, Debug)]
+pub enum SourceId {
+    File(PathBuf),
 }
 
 #[derive(Clone)]

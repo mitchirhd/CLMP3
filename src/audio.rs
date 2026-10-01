@@ -1,4 +1,6 @@
-use rodio::source::{EmptyCallback, Source};
+use rodio::source::{
+    Amplify, EmptyCallback, Pausable, Skippable, Source, Stoppable, TrackPosition,
+};
 use rodio::{MixerDeviceSink, Player};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -81,7 +83,7 @@ pub struct AudioControls {
     is_stopped: AtomicBool,
     is_paused: AtomicBool,
     volume: Mutex<f32>,
-    current_metadata: Mutex<Option<Metadata>>,
+    current_metadata: Mutex<Option<Arc<Metadata>>>,
     total_duration: Mutex<Option<Duration>>,
     position: Mutex<Duration>,
     skip_current: AtomicBool,
@@ -100,6 +102,14 @@ impl AudioControls {
             skip_current: AtomicBool::new(false),
             previous: AtomicBool::new(false),
         }
+    }
+
+    pub fn reset(&self) {
+        self.set_position(Duration::ZERO);
+        self.set_metadata(None);
+        self.set_skip_current(false);
+        self.set_previous_requested(false);
+        self.set_total_duration(Duration::ZERO);
     }
 
     pub fn get_is_stopped(&self) -> bool {
@@ -142,14 +152,14 @@ impl AudioControls {
         *self.total_duration.lock().expect("Mutex acquired") = Some(duration);
     }
 
-    pub fn get_metadata(&self) -> Option<Metadata> {
+    pub fn get_current_metadata(&self) -> Option<Arc<Metadata>> {
         self.current_metadata
             .lock()
             .expect("Mutex acquired")
             .clone()
     }
 
-    pub fn set_metadata(&self, metadata: Option<Metadata>) {
+    pub fn set_metadata(&self, metadata: Option<Arc<Metadata>>) {
         *self.current_metadata.lock().expect("Mutex acquired") = metadata;
     }
 
@@ -159,13 +169,16 @@ impl AudioControls {
 
     pub fn set_skip_current(&self, val: bool) {
         self.skip_current.store(val, Ordering::Relaxed);
+        if val {
+            self.set_is_paused(false);
+        }
     }
 
-    pub fn get_previous(&self) -> bool {
+    pub fn previous_requested(&self) -> bool {
         self.previous.load(Ordering::Relaxed)
     }
 
-    pub fn set_previous(&self, val: bool) {
+    pub fn set_previous_requested(&self, val: bool) {
         self.previous.store(val, Ordering::Relaxed);
     }
 }
@@ -182,8 +195,10 @@ impl AudioPlayer {
     pub fn new(
         event_tx: Sender<CLMP3Event>,
     ) -> (AudioPlayer, Arc<AudioControls>, Arc<SourceQueue>) {
-        let handle =
+        let mut handle =
             rodio::DeviceSinkBuilder::open_default_sink().expect("open default audio stream");
+        handle.log_on_drop(false);
+
         let player = rodio::Player::connect_new(handle.mixer());
 
         let controls = Arc::new(AudioControls::new());
@@ -225,7 +240,7 @@ impl AudioPlayer {
                 self.play_next(state);
             } else if self.controls.get_is_paused() {
                 self.controls.set_is_paused(false);
-                self.update_queue_state(state);
+                state.update_queue_state();
             } else {
                 self.controls.set_is_paused(true);
             }
@@ -235,61 +250,63 @@ impl AudioPlayer {
     }
 
     pub fn play_next(&mut self, state: &mut AppState) {
+        let Some(source) = self.queue.peek() else {
+            return;
+        };
+
         let controls = self.controls.clone();
         controls.set_is_stopped(false);
-        match self.queue.peek() {
-            Some(source) => {
-                let (source_data, metadata) = source.build();
-                self.controls.set_metadata(Some(metadata));
-                let queue_source = source_data
-                    .track_position()
-                    .amplify(1.0)
-                    .skippable()
-                    .stoppable()
-                    .pausable(false)
-                    .periodic_access(Duration::from_millis(1 / 30), move |src| {
-                        if controls.get_is_stopped() {
-                            src.inner_mut().stop();
-                        } else {
-                            let paused = controls.get_is_paused();
-                            src.set_paused(paused);
-                        }
+        let source_data = source.build();
+        self.controls.set_metadata(state.get_metadata(&source));
+        let queue_source = source_data
+            .track_position()
+            .amplify(1.0)
+            .skippable()
+            .stoppable()
+            .pausable(false)
+            .periodic_access(Duration::from_secs_f64(1.0 / 30.0), move |src| {
+                Self::control_tick(&controls, src);
+            });
+        *self.controls.total_duration.lock().expect("Mutex acquired") =
+            queue_source.total_duration();
+        self.player.append(queue_source);
 
-                        if controls.get_skip_current() {
-                            src.inner_mut().inner_mut().skip();
-                        }
+        let event_tx = self.event_tx.clone();
+        let end_callback = EmptyCallback::new(Box::new(move || {
+            event_tx.send(CLMP3Event::SongEnded).unwrap();
+        }));
+        self.player.append(end_callback);
+        state.update_queue_state();
+    }
 
-                        let amp = src.inner_mut().inner_mut().inner_mut();
-                        amp.set_factor((controls.get_volume() / 100.0).powf(2.0));
+    fn control_tick(controls: &AudioControls, src: &mut ControlledSource) {
+        if controls.get_is_stopped() {
+            src.inner_mut().stop();
+        } else {
+            let paused = controls.get_is_paused();
+            src.set_paused(paused);
+        }
 
-                        let track_pos = src.inner_mut().inner_mut().inner_mut().inner_mut();
-                        controls.set_position(track_pos.get_pos());
+        if controls.get_skip_current() {
+            src.inner_mut().inner_mut().skip();
+        }
 
-                        if controls.get_previous() {
-                            if track_pos.get_pos() > Duration::from_secs(1) {
-                                src.try_seek(Duration::ZERO).unwrap();
-                                controls.set_previous(false);
-                            } else {
-                                src.inner_mut().inner_mut().skip();
-                            }
-                        }
-                    });
-                *self.controls.total_duration.lock().expect("Mutex acquired") =
-                    queue_source.total_duration();
-                self.player.append(queue_source);
+        let amp = src.inner_mut().inner_mut().inner_mut();
+        amp.set_factor((controls.get_volume() / 100.0).powf(2.0));
 
-                let event_tx = self.event_tx.clone();
-                let end_callback = EmptyCallback::new(Box::new(move || {
-                    event_tx.send(CLMP3Event::SongEnded).unwrap();
-                }));
-                self.player.append(end_callback);
-                self.update_queue_state(state);
+        let track_pos = src.inner_mut().inner_mut().inner_mut().inner_mut();
+        controls.set_position(track_pos.get_pos());
+
+        if controls.previous_requested() {
+            if track_pos.get_pos() > Duration::from_secs(1) {
+                src.try_seek(Duration::ZERO).unwrap();
+                controls.set_previous_requested(false);
+            } else {
+                src.inner_mut().inner_mut().skip();
             }
-            None => return,
         }
     }
-
-    fn update_queue_state(&self, state: &mut AppState) {
-        state.queue_state.select(Some(state.queue.prev_len()));
-    }
 }
+
+type Built = Box<dyn rodio::Source<Item = f32> + Send>;
+type ControlledSource = Pausable<Stoppable<Skippable<Amplify<TrackPosition<Built>>>>>;
