@@ -118,6 +118,11 @@ impl App {
                 KeyCode::Right,
                 KeyCode::Enter,
                 KeyCode::Backspace,
+                KeyCode::Delete,
+                KeyCode::End,
+                KeyCode::Home,
+                KeyCode::PageUp,
+                KeyCode::PageDown,
             ] {
                 map.insert(
                     (KeyEventKind::Press, modifier, code),

@@ -1,9 +1,9 @@
-use std::{cmp::Ordering, rc::Rc};
+use std::cmp::Ordering;
 
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
     style::Style,
-    widgets::{List, ListItem, StatefulWidget},
+    widgets::{List, ListItem, ListState, StatefulWidget},
 };
 
 use crate::{app_state::AppState, widgets::traits::InputWidget};
@@ -15,12 +15,18 @@ impl QueueWidget {
         QueueWidget {}
     }
 
-    fn select(&self, state: &mut AppState, f: Rc<dyn Fn(&mut AppState)>) {
+    fn select(state: &mut AppState, f: impl FnOnce(&mut ListState)) {
         if state.queue_state.selected().is_none() {
             state.queue_state.select(Some(state.queue.prev_len()));
             return;
         }
-        f(state);
+        f(&mut state.queue_state);
+    }
+
+    fn move_by(state: &mut ListState, f: impl FnOnce(usize) -> usize) {
+        if let Some(current) = state.selected() {
+            *state = state.with_selected(Some(f(current)));
+        };
     }
 }
 
@@ -70,16 +76,21 @@ impl StatefulWidget for &QueueWidget {
 }
 
 impl InputWidget for QueueWidget {
-    fn on_input(
-        &mut self,
-        _modifier: KeyModifiers,
-        key: crossterm::event::KeyCode,
-        state: &mut AppState,
-    ) {
+    fn on_input(&mut self, _modifier: KeyModifiers, key: KeyCode, state: &mut AppState) {
+        let page_step: usize = 5;
+
         match key {
-            KeyCode::Down => self.select(state, Rc::new(|s| s.queue_state.select_next())),
-            KeyCode::Up => self.select(state, Rc::new(|s| s.queue_state.select_previous())),
+            KeyCode::Down => Self::select(state, ListState::select_next),
+            KeyCode::Up => Self::select(state, ListState::select_previous),
             KeyCode::Left => state.queue_state.select(None),
+            KeyCode::Home => Self::select(state, ListState::select_first),
+            KeyCode::End => Self::select(state, ListState::select_last),
+            KeyCode::PageUp => {
+                Self::select(state, |s| Self::move_by(s, |i| i.saturating_sub(page_step)))
+            }
+            KeyCode::PageDown => {
+                Self::select(state, |s| Self::move_by(s, |i| i.saturating_add(page_step)))
+            }
             _ => {}
         }
     }

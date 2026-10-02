@@ -12,6 +12,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{LineGauge, Paragraph, StatefulWidget, Widget},
 };
+use tui_slider::SliderState;
 
 use crate::{
     app_state::AppState, audio::AudioControls, source_builder::Metadata,
@@ -25,8 +26,9 @@ impl PlayerWidget {
         PlayerWidget {}
     }
 
-    fn change_volume(&self, state: &mut AppState, f: Rc<dyn Fn(&mut AppState, f64)>) {
-        f(state, 1.0);
+    fn change_volume(state: &mut AppState, f: impl FnOnce(&mut SliderState, f64)) {
+        let vol_step = 1.0;
+        f(&mut state.volume_state, vol_step);
         state
             .audio_controls
             .set_volume(state.volume_state.value() as f32);
@@ -164,18 +166,10 @@ fn render_volume(area: Rect, buf: &mut Buffer, state: &mut AppState) {
 impl InputWidget for PlayerWidget {
     fn on_input(&mut self, _modifier: KeyModifiers, key: KeyCode, state: &mut AppState) {
         match key {
-            KeyCode::Up => {
-                self.change_volume(state, Rc::new(|s, step| s.volume_state.increase(step)));
-            }
-            KeyCode::Down => {
-                self.change_volume(state, Rc::new(|s, step| s.volume_state.decrease(step)));
-            }
-            KeyCode::Right => {
-                state.audio_controls.set_skip_current(true);
-            }
-            KeyCode::Left => {
-                state.audio_controls.set_previous_requested(true);
-            }
+            KeyCode::Up => Self::change_volume(state, SliderState::increase),
+            KeyCode::Down => Self::change_volume(state, SliderState::decrease),
+            KeyCode::Right => state.audio_controls.set_skip_current(true),
+            KeyCode::Left => state.audio_controls.set_previous_requested(true),
             _ => {}
         }
     }

@@ -32,7 +32,7 @@ impl LoadWidget {
         LoadWidget { file_explorer }
     }
 
-    fn on_enter(&mut self, state: &mut AppState) -> Input {
+    fn open_current(&mut self, state: &mut AppState) -> Input {
         if self.file_explorer.current().is_dir {
             Input::Right
         } else {
@@ -65,22 +65,19 @@ impl Widget for &LoadWidget {
 impl InputWidget for LoadWidget {
     fn on_input(&mut self, _modifier: KeyModifiers, key: KeyCode, state: &mut AppState) {
         let input = match key {
-            KeyCode::Backspace => Input::Left,
-            KeyCode::Left => Input::Left,
-            KeyCode::Right => self.on_enter(state),
+            KeyCode::Left | KeyCode::Backspace => Input::Left,
+            KeyCode::Right | KeyCode::Enter => self.open_current(state),
             KeyCode::Up => Input::Up,
             KeyCode::Down => Input::Down,
             KeyCode::Home => Input::Home,
             KeyCode::End => Input::End,
             KeyCode::PageUp => Input::PageUp,
             KeyCode::PageDown => Input::PageDown,
-            KeyCode::Tab => Input::None,
-            KeyCode::Enter => self.on_enter(state),
             _ => Input::None,
         };
 
-        self.file_explorer
-            .handle(input)
-            .expect("Directory cannot be listed")
+        if let Err(err) = self.file_explorer.handle(input) {
+            // state.set_error(format!("Directory cannot be listed: {err}")); TODO
+        }
     }
 }
