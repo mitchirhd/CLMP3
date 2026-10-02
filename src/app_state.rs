@@ -80,10 +80,11 @@ impl AppState {
         self.metadata_map.read().unwrap().get(&id).cloned()
     }
 
-    pub fn spawn_metadata_load<F>(&self, id: SourceId, load: F)
-    where
-        F: FnOnce() -> Metadata + Send + 'static,
-    {
+    pub fn spawn_metadata_load(
+        &self,
+        id: SourceId,
+        load: impl FnOnce() -> Metadata + Send + 'static,
+    ) {
         if self.metadata_map.read().unwrap().contains_key(&id) {
             return;
         }
@@ -94,7 +95,7 @@ impl AppState {
         });
     }
 
-    pub fn update_queue_state(&mut self){
+    pub fn update_queue_state(&mut self) {
         *self.queue_state.offset_mut() = self.queue.prev_len().saturating_sub(5)
     }
 }
