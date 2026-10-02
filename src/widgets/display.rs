@@ -9,7 +9,7 @@ impl DisplayWidget {
 }
 
 impl Widget for &DisplayWidget {
-    fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer)
+    fn render(self, _area: ratatui::prelude::Rect, _buf: &mut ratatui::prelude::Buffer)
     where
         Self: Sized,
     {

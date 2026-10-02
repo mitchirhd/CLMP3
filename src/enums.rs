@@ -1,6 +1,6 @@
 use crossterm::event::KeyEvent;
 
-pub enum CLMP3Event {
+pub enum Clmp3Event {
     KeyInput(KeyEvent),
     // MouseInput(MouseEvent),
     Redraw,
@@ -8,20 +8,20 @@ pub enum CLMP3Event {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub enum CLMP3Widget {
+pub enum Clmp3Widget {
     Player,
     Display,
     Load,
     Queue,
 }
 
-impl CLMP3Widget {
-    pub fn get_area(&self) -> WidgetArea {
+impl Clmp3Widget {
+    pub fn area(&self) -> WidgetArea {
         match self {
-            CLMP3Widget::Player => WidgetArea::Player,
-            CLMP3Widget::Display => WidgetArea::Display,
-            CLMP3Widget::Load => WidgetArea::Display,
-            CLMP3Widget::Queue => WidgetArea::Queue,
+            Clmp3Widget::Player => WidgetArea::Player,
+            Clmp3Widget::Display => WidgetArea::Display,
+            Clmp3Widget::Load => WidgetArea::Display,
+            Clmp3Widget::Queue => WidgetArea::Queue,
         }
     }
 }

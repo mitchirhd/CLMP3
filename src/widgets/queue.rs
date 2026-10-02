@@ -6,7 +6,11 @@ use ratatui::{
     widgets::{List, ListItem, ListState, StatefulWidget},
 };
 
-use crate::{app_state::AppState, widgets::traits::InputWidget};
+use crate::{
+    app_state::AppState,
+    source_builder::{Metadata, SourceType},
+    widgets::traits::InputWidget,
+};
 
 pub struct QueueWidget {}
 
@@ -39,32 +43,25 @@ impl StatefulWidget for &QueueWidget {
         buf: &mut ratatui::prelude::Buffer,
         state: &mut AppState,
     ) {
-        let prev_len = state.queue.prev_len();
+        let map = state.metadata_map.read().unwrap();
+        let (prev_len, sources) = state.queue.snapshot();
 
-        let items: Vec<ListItem> = {
-            // Lock nur einmal für die ganze Liste
-            let map = state.metadata_map.read().unwrap();
+        let items: Vec<ListItem> = sources
+            .into_iter()
+            .enumerate()
+            .map(|(i, source)| {
+                let metadata = source.id().and_then(|id| map.get(&id));
+                let label = label(&source, metadata.map(|m| m.as_ref()));
 
-            state
-                .queue
-                .prev_as_vec()
-                .into_iter()
-                .chain(state.queue.as_vec())
-                .enumerate()
-                .map(|(i, source)| {
-                    let metadata = source.id().and_then(|id| map.get(&id));
-                    let label = source.label(metadata.map(|m| m.as_ref()));
+                let style = match i.cmp(&prev_len) {
+                    Ordering::Less => Style::default().dark_gray(),
+                    Ordering::Equal => Style::default().blue(),
+                    Ordering::Greater => Style::default().white(),
+                };
 
-                    let style = match i.cmp(&prev_len) {
-                        Ordering::Less => Style::default().dark_gray(),
-                        Ordering::Equal => Style::default().blue(),
-                        Ordering::Greater => Style::default().white(),
-                    };
-
-                    ListItem::new(label).style(style)
-                })
-                .collect()
-        }; // Guard und Borrow von state enden hier
+                ListItem::new(label).style(style)
+            })
+            .collect();
 
         let list = List::new(items)
             .highlight_style(Style::new().reversed())
@@ -72,6 +69,16 @@ impl StatefulWidget for &QueueWidget {
             .repeat_highlight_symbol(true);
 
         list.render(area, buf, &mut state.queue_state);
+    }
+}
+
+fn label(source: &SourceType, metadata: Option<&Metadata>) -> String {
+    match source {
+        SourceType::SineWave(freq, _) => format!("Sine {freq}"),
+        SourceType::File(file) => match metadata {
+            Some(m) => format!("{} - {}", m.title, m.artist.as_deref().unwrap_or("unknown")),
+            None => file.name.to_string(),
+        },
     }
 }
 

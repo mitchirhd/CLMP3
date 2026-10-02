@@ -10,16 +10,15 @@ use tui_slider::SliderState;
 
 use crate::{
     audio::{AudioControls, SourceQueue},
-    enums::{CLMP3Widget, WidgetArea},
+    enums::{Clmp3Widget, WidgetArea},
     source_builder::{Metadata, SourceId, SourceType},
 };
 
-#[derive(Clone)]
 pub struct AppState {
     pub audio_controls: Arc<AudioControls>,
     pub queue: Arc<SourceQueue>,
-    selected_widget: CLMP3Widget,
-    last_display_widget: CLMP3Widget,
+    selected_widget: Clmp3Widget,
+    last_display_widget: Clmp3Widget,
     volume_changed_time: Option<SystemTime>,
     pub queue_state: ListState,
     pub volume_state: SliderState,
@@ -29,10 +28,10 @@ pub struct AppState {
 impl AppState {
     pub fn new(audio_controls: Arc<AudioControls>, queue: Arc<SourceQueue>) -> AppState {
         let val = AppState {
-            audio_controls: audio_controls,
+            audio_controls,
             queue,
-            selected_widget: CLMP3Widget::Player,
-            last_display_widget: CLMP3Widget::Display,
+            selected_widget: Clmp3Widget::Player,
+            last_display_widget: Clmp3Widget::Display,
             volume_changed_time: None,
             queue_state: ListState::default(),
             volume_state: SliderState::new(100.0, 0.0, 100.0),
@@ -43,22 +42,22 @@ impl AppState {
         val
     }
 
-    pub fn get_selected_widget(&self) -> CLMP3Widget {
+    pub fn get_selected_widget(&self) -> Clmp3Widget {
         self.selected_widget
     }
 
-    pub fn set_selected_widget(&mut self, val: CLMP3Widget) {
+    pub fn set_selected_widget(&mut self, val: Clmp3Widget) {
         self.selected_widget = val;
-        if val.get_area() == WidgetArea::Display {
+        if val.area() == WidgetArea::Display {
             self.last_display_widget = val;
         }
-        if val != CLMP3Widget::Queue {
+        if val != Clmp3Widget::Queue {
             self.queue_state.select(None);
             self.update_queue_state();
         }
     }
 
-    pub fn get_last_display_widget(&self) -> CLMP3Widget {
+    pub fn get_last_display_widget(&self) -> Clmp3Widget {
         self.last_display_widget
     }
 
@@ -67,10 +66,10 @@ impl AppState {
     }
 
     pub fn draw_volume_slider(&self) -> bool {
-        if let Some(time) = self.volume_changed_time {
-            if time.elapsed().expect("Time error").as_secs() < 1 {
-                return true;
-            }
+        if let Some(time) = self.volume_changed_time
+            && time.elapsed().expect("Time error").as_secs() < 1
+        {
+            return true;
         }
         false
     }
@@ -85,13 +84,20 @@ impl AppState {
         id: SourceId,
         load: impl FnOnce() -> Metadata + Send + 'static,
     ) {
-        if self.metadata_map.read().unwrap().contains_key(&id) {
+        if self
+            .metadata_map
+            .read()
+            .expect("metadata map lock poisoned")
+            .contains_key(&id)
+        {
             return;
         }
+
         let map = Arc::clone(&self.metadata_map);
         thread::spawn(move || {
             let metadata = load();
-            map.write().unwrap().insert(id, Arc::new(metadata));
+            let mut map = map.write().expect("metadata map lock poisoned");
+            map.insert(id, Arc::new(metadata));
         });
     }
 

@@ -25,20 +25,6 @@ impl SourceType {
         }
     }
 
-    pub fn label(&self, metadata: Option<&Metadata>) -> String {
-        match self {
-            SourceType::SineWave(freq, _) => format!("Sine {freq}"),
-            SourceType::File(file) => match metadata {
-                Some(m) => format!(
-                    "{} - {}",
-                    m.title,
-                    m.artist.as_deref().unwrap_or("unknown")
-                ),
-                None => file.name.to_string(),
-            },
-        }
-    }
-
     pub fn id(&self) -> Option<SourceId> {
         match self {
             SourceType::SineWave(_, _) => None,

@@ -2,6 +2,7 @@ use rodio::source::{
     Amplify, EmptyCallback, Pausable, Skippable, Source, Stoppable, TrackPosition,
 };
 use rodio::{MixerDeviceSink, Player};
+use std::collections::VecDeque;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
@@ -9,72 +10,87 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
 use crate::app_state::AppState;
-use crate::enums::{CLMP3Event, CLMP3Widget};
+use crate::enums::{Clmp3Event, Clmp3Widget};
 use crate::source_builder::{Metadata, SourceType};
 
+struct SourceQueueContents {
+    previous: Vec<SourceType>,
+    upcoming: VecDeque<SourceType>,
+}
+
 pub struct SourceQueue {
-    previous: RwLock<Vec<SourceType>>,
-    queue: RwLock<Vec<SourceType>>,
+    contents: RwLock<SourceQueueContents>,
 }
 
 impl SourceQueue {
     pub fn new() -> SourceQueue {
         SourceQueue {
-            previous: RwLock::new(Vec::new()),
-            queue: RwLock::new(Vec::new()),
+            contents: RwLock::new(SourceQueueContents {
+                previous: Vec::new(),
+                upcoming: VecDeque::new(),
+            }),
         }
     }
 
     pub fn enqueue(&self, item: SourceType) {
-        self.queue.write().expect("RwLock acquired").push(item);
+        self.contents
+            .write()
+            .expect("RwLock acquired")
+            .upcoming
+            .push_back(item);
     }
 
     pub fn current_to_previous(&self) {
-        if !self.is_empty() {
-            let val = self.queue.write().expect("RwLock acquired").remove(0);
-            self.previous
-                .write()
-                .expect("RwLock acquired")
-                .push(val.clone());
+        let mut contents = self.contents.write().expect("queue lock poisoned");
+
+        if let Some(item) = contents.upcoming.pop_front() {
+            contents.previous.push(item);
         }
     }
 
     pub fn peek(&self) -> Option<SourceType> {
-        self.queue.read().expect("RwLock acquired").first().cloned()
+        self.contents
+            .read()
+            .expect("RwLock acquired")
+            .upcoming
+            .front()
+            .cloned()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.queue.read().expect("RwLock acquired").is_empty()
-    }
-
-    pub fn prev_as_vec(&self) -> Vec<SourceType> {
-        self.previous
+        self.contents
             .read()
             .expect("RwLock acquired")
-            .iter()
-            .cloned()
-            .collect()
+            .upcoming
+            .is_empty()
     }
 
-    pub fn as_vec(&self) -> Vec<SourceType> {
-        self.queue
-            .read()
-            .expect("RwLock acquired")
+    pub fn snapshot(&self) -> (usize, Vec<SourceType>) {
+        let contents = self.contents.read().expect("queue lock poisoned");
+        let prev_len = contents.previous.len();
+
+        let items = contents
+            .previous
             .iter()
+            .chain(contents.upcoming.iter())
             .cloned()
-            .collect()
+            .collect();
+
+        (prev_len, items)
     }
 
     pub fn prev_len(&self) -> usize {
-        self.previous.read().expect("RwLock acquired").len()
+        self.contents
+            .read()
+            .expect("RwLock acquired")
+            .previous
+            .len()
     }
 
     pub fn replay(&self) {
-        let mut queue = self.queue.write().expect("RwLock acquired");
-        let mut prev_queue = self.previous.write().expect("RwLock acquired");
-
-        if !prev_queue.is_empty() {
-            queue.insert(0, prev_queue.pop().unwrap());
+        let mut contents = self.contents.write().expect("queue lock poisoned");
+        if let Some(item) = contents.previous.pop() {
+            contents.upcoming.push_front(item);
         }
     }
 }
@@ -191,12 +207,12 @@ pub struct AudioPlayer {
     player: Player,
     controls: Arc<AudioControls>,
     queue: Arc<SourceQueue>,
-    event_tx: Sender<CLMP3Event>,
+    event_tx: Sender<Clmp3Event>,
 }
 
 impl AudioPlayer {
     pub fn new(
-        event_tx: Sender<CLMP3Event>,
+        event_tx: Sender<Clmp3Event>,
     ) -> (AudioPlayer, Arc<AudioControls>, Arc<SourceQueue>) {
         let mut handle =
             rodio::DeviceSinkBuilder::open_default_sink().expect("open default audio stream");
@@ -211,7 +227,7 @@ impl AudioPlayer {
         (
             AudioPlayer {
                 _sink: handle,
-                player: player,
+                player,
                 controls: controls.clone(),
                 queue: queue.clone(),
                 event_tx,
@@ -248,7 +264,7 @@ impl AudioPlayer {
                 self.controls.set_is_paused(true);
             }
         } else {
-            state.set_selected_widget(CLMP3Widget::Load);
+            state.set_selected_widget(Clmp3Widget::Load);
         }
     }
 
@@ -276,7 +292,7 @@ impl AudioPlayer {
 
         let event_tx = self.event_tx.clone();
         let end_callback = EmptyCallback::new(Box::new(move || {
-            event_tx.send(CLMP3Event::SongEnded).unwrap();
+            event_tx.send(Clmp3Event::SongEnded).unwrap();
         }));
         self.player.append(end_callback);
         state.update_queue_state();

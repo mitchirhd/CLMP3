@@ -1,8 +1,8 @@
-use std::{cell::RefCell, collections::HashMap, io, rc::Rc};
+use std::io;
 
 use crate::{
     app_state::AppState,
-    enums::{CLMP3Widget, WidgetArea},
+    enums::{Clmp3Widget, WidgetArea},
     widgets::{
         display::DisplayWidget, load::LoadWidget, player::PlayerWidget, queue::QueueWidget,
         traits::InputWidget,
@@ -22,30 +22,19 @@ use ratatui::{
 use tui_slider::{Slider, SliderOrientation};
 
 pub struct MainWidget {
-    input_widgets: HashMap<CLMP3Widget, Rc<RefCell<dyn InputWidget>>>,
-    player_widget: Rc<RefCell<PlayerWidget>>,
-    display_widget: Rc<RefCell<DisplayWidget>>,
-    queue_widget: Rc<RefCell<QueueWidget>>,
-    load_widget: Rc<RefCell<LoadWidget>>,
+    player_widget: PlayerWidget,
+    display_widget: DisplayWidget,
+    queue_widget: QueueWidget,
+    load_widget: LoadWidget,
 }
 
 impl MainWidget {
     pub fn new() -> MainWidget {
-        let player_widget = Rc::new(RefCell::new(PlayerWidget::new()));
-        let queue_widget = Rc::new(RefCell::new(QueueWidget::new()));
-        let load_widget = Rc::new(RefCell::new(LoadWidget::new()));
-
-        let mut input_widgets: HashMap<CLMP3Widget, Rc<RefCell<dyn InputWidget>>> = HashMap::new();
-        input_widgets.insert(CLMP3Widget::Player, player_widget.clone());
-        input_widgets.insert(CLMP3Widget::Queue, queue_widget.clone());
-        input_widgets.insert(CLMP3Widget::Load, load_widget.clone());
-
         MainWidget {
-            input_widgets: input_widgets,
-            player_widget: player_widget,
-            display_widget: Rc::new(RefCell::new(DisplayWidget::new())),
-            queue_widget: queue_widget,
-            load_widget: load_widget,
+            player_widget: PlayerWidget::new(),
+            display_widget: DisplayWidget::new(),
+            queue_widget: QueueWidget::new(),
+            load_widget: LoadWidget::new(),
         }
     }
 
@@ -55,9 +44,14 @@ impl MainWidget {
         key: KeyCode,
         state: &mut AppState,
     ) {
-        match self.input_widgets.get(&state.get_selected_widget()) {
-            Some(widget) => widget.borrow_mut().on_input(modifier, key, state),
-            None => {}
+        let input_widget: Option<&mut dyn InputWidget> = match state.get_selected_widget() {
+            Clmp3Widget::Player => Some(&mut self.player_widget),
+            Clmp3Widget::Display => None,
+            Clmp3Widget::Load => Some(&mut self.load_widget),
+            Clmp3Widget::Queue => Some(&mut self.queue_widget),
+        };
+        if let Some(input_widget) = input_widget {
+            input_widget.on_input(modifier, key, state);
         }
     }
 
@@ -81,8 +75,8 @@ impl MainWidget {
         let inner = display_block.inner(display_area);
 
         match state.get_last_display_widget() {
-            CLMP3Widget::Display => self.display_widget.borrow().render(inner, buf),
-            CLMP3Widget::Load => self.load_widget.borrow().render(inner, buf),
+            Clmp3Widget::Display => self.display_widget.render(inner, buf),
+            Clmp3Widget::Load => self.load_widget.render(inner, buf),
             _ => {}
         }
 
@@ -101,10 +95,7 @@ impl MainWidget {
             .border_set(thickness)
             .border_style(style);
 
-        if state.get_selected_widget() != CLMP3Widget::Queue {}
-
         self.queue_widget
-            .borrow_mut()
             .render(queue_block.inner(queue_area), buf, state);
 
         queue_block.render(queue_area, buf);
@@ -123,7 +114,6 @@ impl MainWidget {
             .border_style(style);
 
         self.player_widget
-            .borrow_mut()
             .render(player_block.inner(player_area), buf, state);
 
         player_block.render(player_area, buf);
@@ -158,7 +148,7 @@ impl MainWidget {
     }
 
     fn get_thickness(&self, check: WidgetArea, state: &AppState) -> (border::Set<'static>, Style) {
-        if state.get_selected_widget().get_area() == check {
+        if state.get_selected_widget().area() == check {
             (border::THICK, Style::default().blue())
         } else {
             (border::PLAIN, Style::default().white())

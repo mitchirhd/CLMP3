@@ -76,7 +76,7 @@ impl InputWidget for LoadWidget {
             _ => Input::None,
         };
 
-        if let Err(err) = self.file_explorer.handle(input) {
+        if let Err(_err) = self.file_explorer.handle(input) {
             // state.set_error(format!("Directory cannot be listed: {err}")); TODO
         }
     }

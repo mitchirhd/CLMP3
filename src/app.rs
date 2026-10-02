@@ -1,58 +1,78 @@
 use std::{
     collections::HashMap,
     io,
-    rc::Rc,
     sync::mpsc::{self, Receiver, Sender},
     thread,
     time::Duration,
 };
 
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::DefaultTerminal;
 
-use crate::{app_state::AppState, audio::AudioPlayer, enums::CLMP3Event};
-use crate::{enums::CLMP3Widget, widgets::main_widget::MainWidget};
+use crate::{app_state::AppState, audio::AudioPlayer, enums::Clmp3Event};
+use crate::{enums::Clmp3Widget, widgets::main_widget::MainWidget};
 
-fn handle_input_events(tx: Sender<CLMP3Event>) {
-    loop {
-        match crossterm::event::read().unwrap() {
-            crossterm::event::Event::Key(key_event) => {
-                tx.send(CLMP3Event::KeyInput(key_event)).unwrap()
-            }
-            // crossterm::event::Event::Mouse(mouse_event) => {}
-            crossterm::event::Event::Resize(_, _) => tx.send(CLMP3Event::Redraw).unwrap(),
-            _ => {}
+const NAV_MODIFIERS: [KeyModifiers; 3] = [
+    KeyModifiers::NONE,
+    KeyModifiers::CONTROL,
+    KeyModifiers::SHIFT,
+];
+
+const NAV_KEYS: [KeyCode; 11] = [
+    KeyCode::Up,
+    KeyCode::Down,
+    KeyCode::Left,
+    KeyCode::Right,
+    KeyCode::Enter,
+    KeyCode::Backspace,
+    KeyCode::Delete,
+    KeyCode::End,
+    KeyCode::Home,
+    KeyCode::PageUp,
+    KeyCode::PageDown,
+];
+
+fn handle_input_events(tx: Sender<Clmp3Event>) {
+    while let Ok(event) = crossterm::event::read() {
+        let msg = match event {
+            Event::Key(key) => Clmp3Event::KeyInput(key),
+            Event::Resize(_, _) => Clmp3Event::Redraw,
+            _ => continue,
+        };
+        if tx.send(msg).is_err() {
+            break;
         }
     }
 }
 
-fn redraw_loop(tx: Sender<CLMP3Event>) {
-    loop {
-        tx.send(CLMP3Event::Redraw).unwrap();
-        thread::sleep(Duration::from_secs_f64(1.0 / 10.0));
+fn redraw_loop(tx: Sender<Clmp3Event>) {
+    while tx.send(Clmp3Event::Redraw).is_ok() {
+        thread::sleep(Duration::from_millis(100));
     }
 }
 
+type HandlerMap = HashMap<(KeyEventKind, KeyModifiers, KeyCode), fn(&mut App)>;
+
 pub struct App {
     exit: bool,
-    event_tx: Sender<CLMP3Event>,
-    event_rx: Receiver<CLMP3Event>,
+    event_tx: Sender<Clmp3Event>,
+    event_rx: Receiver<Clmp3Event>,
     main_widget: MainWidget,
     app_state: AppState,
-    handler_map: HashMap<(KeyEventKind, KeyModifiers, KeyCode), Rc<dyn Fn(&mut App)>>,
+    handler_map: HandlerMap,
     audio_player: AudioPlayer,
 }
 
 impl App {
     pub fn new() -> App {
-        let (event_tx, event_rx) = mpsc::channel::<CLMP3Event>();
+        let (event_tx, event_rx) = mpsc::channel::<Clmp3Event>();
         let (audio_player, audio_controls, queue) = AudioPlayer::new(event_tx.clone());
         let app_state = AppState::new(audio_controls, queue);
 
         App {
             exit: false,
-            event_tx: event_tx,
-            event_rx: event_rx,
+            event_tx,
+            event_rx,
             main_widget: MainWidget::new(),
             app_state,
             handler_map: App::get_handler_map(),
@@ -60,9 +80,8 @@ impl App {
         }
     }
 
-    fn get_handler_map() -> HashMap<(KeyEventKind, KeyModifiers, KeyCode), Rc<dyn Fn(&mut App)>> {
-        let mut map: HashMap<(KeyEventKind, KeyModifiers, KeyCode), Rc<dyn Fn(&mut App)>> =
-            HashMap::new();
+    fn get_handler_map() -> HandlerMap {
+        let mut map: HandlerMap = HashMap::new();
 
         map.insert(
             (
@@ -70,66 +89,33 @@ impl App {
                 KeyModifiers::CONTROL,
                 KeyCode::Char('c'),
             ),
-            Rc::new(App::exit_app),
+            App::exit_app,
         );
 
         map.insert(
             (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Char('p')),
-            Rc::new(|app| {
-                app.app_state.set_selected_widget(CLMP3Widget::Player);
-            }),
+            |app| app.app_state.set_selected_widget(Clmp3Widget::Player),
         );
 
         map.insert(
             (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Char('d')),
-            Rc::new(|app| {
-                app.app_state.set_selected_widget(CLMP3Widget::Display);
-            }),
+            |app| app.app_state.set_selected_widget(Clmp3Widget::Display),
         );
 
         map.insert(
             (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Char('l')),
-            Rc::new(|app| {
-                app.app_state.set_selected_widget(CLMP3Widget::Load);
-            }),
+            |app| app.app_state.set_selected_widget(Clmp3Widget::Load),
         );
 
         map.insert(
             (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Char('q')),
-            Rc::new(|app| {
-                app.app_state.set_selected_widget(CLMP3Widget::Queue);
-            }),
+            |app| app.app_state.set_selected_widget(Clmp3Widget::Queue),
         );
 
         map.insert(
             (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Char(' ')),
-            Rc::new(App::start_stop),
+            App::start_stop,
         );
-
-        for modifier in [
-            KeyModifiers::NONE,
-            KeyModifiers::CONTROL,
-            KeyModifiers::SHIFT,
-        ] {
-            for code in [
-                KeyCode::Up,
-                KeyCode::Down,
-                KeyCode::Left,
-                KeyCode::Right,
-                KeyCode::Enter,
-                KeyCode::Backspace,
-                KeyCode::Delete,
-                KeyCode::End,
-                KeyCode::Home,
-                KeyCode::PageUp,
-                KeyCode::PageDown,
-            ] {
-                map.insert(
-                    (KeyEventKind::Press, modifier, code),
-                    Rc::new(move |app| App::on_navigation_key(app, modifier, code)),
-                );
-            }
-        }
 
         map
     }
@@ -152,16 +138,13 @@ impl App {
 
     fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
         while !self.exit {
-            let event = self
-                .event_rx
-                .recv()
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            let event = self.event_rx.recv().map_err(io::Error::other)?;
 
             match event {
-                CLMP3Event::KeyInput(key_event) => self.handle_key_event(key_event),
-                // CLMP3Event::MouseInput(mouse_event) => todo!(),
-                CLMP3Event::Redraw => {}
-                CLMP3Event::SongEnded => self.handle_song_ended(),
+                Clmp3Event::KeyInput(key_event) => self.handle_key_event(key_event),
+                // Clmp3Event::MouseInput(mouse_event) => todo!(),
+                Clmp3Event::Redraw => {}
+                Clmp3Event::SongEnded => self.handle_song_ended(),
             }
             self.main_widget.draw(terminal, &mut self.app_state)?;
         }
@@ -170,13 +153,21 @@ impl App {
     }
 
     fn handle_key_event(&mut self, key_event: KeyEvent) {
-        match self
-            .handler_map
-            .get(&(key_event.kind, key_event.modifiers, key_event.code))
-            .cloned()
-        {
-            Some(func) => func(self),
-            None => (),
+        let KeyEvent {
+            kind,
+            modifiers,
+            code,
+            ..
+        } = key_event;
+        if kind != KeyEventKind::Press {
+            return;
+        }
+
+        if let Some(handler) = self.handler_map.get(&(kind, modifiers, code)).copied() {
+            handler(self);
+        } else if NAV_KEYS.contains(&code) && NAV_MODIFIERS.contains(&modifiers) {
+            self.main_widget
+                .on_navigation_key(modifiers, code, &mut self.app_state);
         }
     }
 
@@ -199,11 +190,6 @@ impl App {
 
     fn exit_app(app: &mut App) {
         app.exit = true;
-    }
-
-    fn on_navigation_key(app: &mut App, modifier: KeyModifiers, key: KeyCode) {
-        app.main_widget
-            .on_navigation_key(modifier, key, &mut app.app_state);
     }
 
     fn start_stop(app: &mut App) {

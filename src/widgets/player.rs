@@ -1,5 +1,4 @@
 use std::{
-    rc::Rc,
     sync::Arc,
     time::{Duration, SystemTime},
 };
@@ -80,9 +79,9 @@ fn render_title_bar(area: Rect, buf: &mut Buffer, metadata: Option<Arc<Metadata>
     let line = Line::from_iter([
         Span::from(&metadata.title),
         delimiter1,
-        Span::from(metadata.artist.clone().unwrap_or(String::from(""))),
+        Span::from(metadata.artist.as_deref().unwrap_or("")),
         delimiter2,
-        Span::from(metadata.album.clone().unwrap_or(String::from(""))),
+        Span::from(metadata.album.as_deref().unwrap_or("")),
     ]);
     line.render(area.inner(Margin::new(1, 0)), buf);
 }
