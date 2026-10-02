@@ -180,6 +180,9 @@ impl AudioControls {
 
     pub fn set_previous_requested(&self, val: bool) {
         self.previous.store(val, Ordering::Relaxed);
+        if val {
+            self.set_is_paused(false);
+        }
     }
 }
 
