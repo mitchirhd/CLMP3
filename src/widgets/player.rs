@@ -56,7 +56,7 @@ impl StatefulWidget for &PlayerWidget {
             ])
             .areas(button_area);
 
-        render_title_bar(title_area, buf, state.audio_controls.get_current_metadata());
+        render_title_bar(title_area, buf, state.get_current_metadata());
         render_progress_bar(progress_area, buf, &state.audio_controls);
         render_buttons(button_area, buf, &state.audio_controls);
         render_volume(volume_area, buf, state);

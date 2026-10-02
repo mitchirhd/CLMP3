@@ -193,6 +193,10 @@ impl App {
     }
 
     fn start_stop(app: &mut App) {
-        app.audio_player.start_stop(&mut app.app_state);
+        if app.audio_player.has_next() || !app.app_state.audio_controls.get_is_stopped() {
+            app.audio_player.start_stop(&mut app.app_state);
+        } else {
+            app.app_state.set_selected_widget(Clmp3Widget::Load);
+        }
     }
 }

@@ -79,6 +79,14 @@ impl AppState {
         self.metadata_map.read().unwrap().get(&id).cloned()
     }
 
+    pub fn get_current_metadata(&self) -> Option<Arc<Metadata>> {
+        if let Some(source) = self.audio_controls.get_current_source() {
+            self.get_metadata(&source)
+        } else {
+            None
+        }
+    }
+
     pub fn spawn_metadata_load(
         &self,
         id: SourceId,

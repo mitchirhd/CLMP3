@@ -10,8 +10,8 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
 use crate::app_state::AppState;
-use crate::enums::{Clmp3Event, Clmp3Widget};
-use crate::source_builder::{Metadata, SourceType};
+use crate::enums::Clmp3Event;
+use crate::source_builder::SourceType;
 
 struct SourceQueueContents {
     previous: Vec<SourceType>,
@@ -99,7 +99,7 @@ pub struct AudioControls {
     is_stopped: AtomicBool,
     is_paused: AtomicBool,
     volume: Mutex<f32>,
-    current_metadata: Mutex<Option<Arc<Metadata>>>,
+    current_source: Mutex<Option<SourceType>>,
     total_duration: Mutex<Option<Duration>>,
     position: Mutex<Duration>,
     skip_current: AtomicBool,
@@ -112,7 +112,7 @@ impl AudioControls {
             is_stopped: AtomicBool::new(true),
             is_paused: AtomicBool::new(false),
             volume: Mutex::new(1.0),
-            current_metadata: Mutex::new(None),
+            current_source: Mutex::new(None),
             total_duration: Mutex::new(None),
             position: Mutex::new(Duration::ZERO),
             skip_current: AtomicBool::new(false),
@@ -122,7 +122,7 @@ impl AudioControls {
 
     pub fn reset(&self) {
         self.set_position(Duration::ZERO);
-        self.set_metadata(None);
+        self.set_current_source(None);
         self.set_skip_current(false);
         self.set_previous_requested(false);
         self.set_total_duration(Duration::ZERO);
@@ -168,15 +168,12 @@ impl AudioControls {
         *self.total_duration.lock().expect("Mutex acquired") = Some(duration);
     }
 
-    pub fn get_current_metadata(&self) -> Option<Arc<Metadata>> {
-        self.current_metadata
-            .lock()
-            .expect("Mutex acquired")
-            .clone()
+    pub fn get_current_source(&self) -> Option<SourceType> {
+        self.current_source.lock().expect("Mutex acquired").clone()
     }
 
-    pub fn set_metadata(&self, metadata: Option<Arc<Metadata>>) {
-        *self.current_metadata.lock().expect("Mutex acquired") = metadata;
+    pub fn set_current_source(&self, source: Option<SourceType>) {
+        *self.current_source.lock().expect("Mutex acquired") = source;
     }
 
     pub fn get_skip_current(&self) -> bool {
@@ -253,18 +250,13 @@ impl AudioPlayer {
     }
 
     pub fn start_stop(&mut self, state: &mut AppState) {
-        if self.has_next() || !state.audio_controls.get_is_stopped() {
-            // falls was in queue, oder aktuell am spielen
-            if self.controls.get_is_stopped() && self.has_next() {
-                self.play_next(state);
-            } else if self.controls.get_is_paused() {
-                self.controls.set_is_paused(false);
-                state.update_queue_state();
-            } else {
-                self.controls.set_is_paused(true);
-            }
+        if self.controls.get_is_stopped() && self.has_next() {
+            self.play_next(state);
+        } else if self.controls.get_is_paused() {
+            self.controls.set_is_paused(false);
+            state.update_queue_state();
         } else {
-            state.set_selected_widget(Clmp3Widget::Load);
+            self.controls.set_is_paused(true);
         }
     }
 
@@ -276,7 +268,7 @@ impl AudioPlayer {
         let controls = self.controls.clone();
         controls.set_is_stopped(false);
         let source_data = source.build();
-        self.controls.set_metadata(state.get_metadata(&source));
+        self.controls.set_current_source(Some(source));
         let queue_source = source_data
             .track_position()
             .amplify(1.0)
