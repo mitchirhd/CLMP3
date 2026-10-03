@@ -1,4 +1,8 @@
-use std::{fs::File, path::PathBuf, time::Duration};
+use std::{
+    fs::File,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 use lofty::{file::TaggedFileExt, probe::Probe, tag::Accessor};
 use rodio::{Decoder, Source, source::SineWave};
@@ -16,7 +20,7 @@ impl SourceType {
                 Box::new(SineWave::new(*freq).take_duration(*duration))
             }
             SourceType::File(path) => Box::new(
-                Decoder::try_from(File::open(&path).expect("Could not open file"))
+                Decoder::try_from(File::open(path).expect("Could not open file"))
                     .expect("Could not decode audio"),
             ),
         }
@@ -30,7 +34,7 @@ impl SourceType {
     }
 }
 
-pub fn file_name(path: &PathBuf) -> String {
+pub fn file_name(path: &Path) -> String {
     path.file_name()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_default()

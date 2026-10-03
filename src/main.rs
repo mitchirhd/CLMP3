@@ -6,6 +6,7 @@ use app::App;
 mod app_state;
 mod audio;
 mod source_builder;
+mod source_queue;
 
 fn main() -> io::Result<()> {
     let mut terminal = ratatui::init();
