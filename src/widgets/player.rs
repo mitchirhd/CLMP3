@@ -1,6 +1,6 @@
 use std::{
     sync::Arc,
-    time::{Duration, SystemTime},
+    time::{Duration, Instant},
 };
 
 use crossterm::event::{KeyCode, KeyModifiers};
@@ -11,11 +11,12 @@ use ratatui::{
     text::{Line, Span},
     widgets::{LineGauge, Paragraph, StatefulWidget, Widget},
 };
-use tui_slider::SliderState;
 
 use crate::{
     app_state::AppState, audio::AudioPlayer, source_builder::Metadata, widgets::traits::InputWidget,
 };
+
+const VOL_STEP: f32 = 1.0;
 
 pub struct PlayerWidget {}
 
@@ -24,11 +25,24 @@ impl PlayerWidget {
         PlayerWidget {}
     }
 
-    fn change_volume(state: &mut AppState, f: impl FnOnce(&mut SliderState, f64)) {
-        let vol_step = 1.0;
-        f(&mut state.volume_state, vol_step);
-        state.player.set_volume(state.volume_state.value() as f32);
-        state.set_volume_changed_time(SystemTime::now());
+    fn change_volume(&mut self, state: &mut AppState, f: impl FnOnce(f32, f32) -> f32) {
+        state.player.set_volume(f(state.player.volume(), VOL_STEP));
+        state.set_volume_changed_time(Instant::now());
+    }
+
+    fn render_volume(&self, area: Rect, buf: &mut Buffer, state: &AppState) {
+        let mut icon = "🔈";
+        if state.player.volume() > 66.6 {
+            icon = "🔊";
+        } else if state.player.volume() > 33.3 {
+            icon = "🔉"
+        }
+
+        let text = format!("{icon} {}%", state.player.volume());
+
+        Paragraph::new(text)
+            .right_aligned()
+            .render(area.inner(Margin::new(3, 0)), buf);
     }
 }
 
@@ -56,7 +70,7 @@ impl StatefulWidget for &PlayerWidget {
         render_title_bar(title_area, buf, state.current_metadata());
         render_progress_bar(progress_area, buf, state);
         render_buttons(button_area, buf, &state.player);
-        render_volume(volume_area, buf, state);
+        self.render_volume(volume_area, buf, state);
     }
 }
 
@@ -143,26 +157,11 @@ fn render_button(label: &str, area: Rect, buf: &mut Buffer) {
     Paragraph::new(label).centered().render(area, buf);
 }
 
-fn render_volume(area: Rect, buf: &mut Buffer, state: &mut AppState) {
-    let mut icon = "🔈";
-    if state.volume_state.value() > 66.6 {
-        icon = "🔊";
-    } else if state.volume_state.value() > 33.3 {
-        icon = "🔉"
-    }
-
-    let text = format!("{icon} {}%", state.volume_state.value());
-
-    Paragraph::new(text)
-        .right_aligned()
-        .render(area.inner(Margin::new(3, 0)), buf);
-}
-
 impl InputWidget for PlayerWidget {
     fn on_input(&mut self, _modifier: KeyModifiers, key: KeyCode, state: &mut AppState) {
         match key {
-            KeyCode::Up => Self::change_volume(state, SliderState::increase),
-            KeyCode::Down => Self::change_volume(state, SliderState::decrease),
+            KeyCode::Up => self.change_volume(state, |vol, step| vol + step),
+            KeyCode::Down => self.change_volume(state, |vol, step| vol - step),
             KeyCode::Right => state.player.skip(),
             KeyCode::Left => state.player.previous(),
             _ => {}

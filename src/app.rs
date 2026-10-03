@@ -140,11 +140,7 @@ impl App {
             match event {
                 Clmp3Event::KeyInput(key_event) => self.handle_key_event(key_event),
                 // Clmp3Event::MouseInput(mouse_event) => todo!(),
-                Clmp3Event::Redraw => {
-                    if self.app_state.player.update() {
-                        self.app_state.on_playback_changed();
-                    }
-                }
+                Clmp3Event::Redraw => self.app_state.player.update(),
             }
             self.main_widget.draw(terminal, &mut self.app_state)?;
         }

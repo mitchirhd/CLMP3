@@ -13,6 +13,7 @@ pub struct AudioPlayer {
     pub queue: SourceQueue,
     pub total_duration: Option<Duration>,
     stopped: bool,
+    volume: f32,
 }
 
 impl AudioPlayer {
@@ -29,6 +30,7 @@ impl AudioPlayer {
             queue: SourceQueue::new(),
             total_duration: None,
             stopped: true,
+            volume: 100.0,
         }
     }
 
@@ -46,7 +48,7 @@ impl AudioPlayer {
 
     pub fn start_stop(&mut self) {
         if self.stopped() && self.has_next() {
-            self.play_front();
+            self.play_front_or_stop();
         } else if self.player.is_paused() {
             self.player.play();
         } else {
@@ -62,8 +64,13 @@ impl AudioPlayer {
         self.stopped
     }
 
-    pub fn set_volume(&self, vol: f32) {
-        self.player.set_volume((vol / 100.0).powf(2.0));
+    pub fn volume(&self) -> f32 {
+        self.volume
+    }
+
+    pub fn set_volume(&mut self, vol: f32) {
+        self.volume = vol.clamp(0.0, 100.0);
+        self.player.set_volume((self.volume / 100.0).powf(2.0));
     }
 
     pub fn position(&self) -> Duration {
@@ -84,7 +91,7 @@ impl AudioPlayer {
         }
         if self.player.get_pos() <= RESTART_THRESHOLD {
             self.queue.previous_to_current();
-            self.play_front();
+            self.play_front_or_stop();
         } else {
             self.player.try_seek(Duration::ZERO).unwrap();
         }
@@ -94,17 +101,14 @@ impl AudioPlayer {
         self.player.skip_one();
     }
 
-    pub fn update(&mut self) -> bool {
-        if self.stopped || !self.player.empty() {
-            false
-        } else {
+    pub fn update(&mut self) {
+        if !self.stopped && self.player.empty() {
             self.queue.current_to_previous();
-            self.play_front();
-            true
+            self.play_front_or_stop();
         }
     }
 
-    fn play_front(&mut self) {
+    fn play_front_or_stop(&mut self) {
         self.player.stop();
 
         if let Some(source) = self.queue.peek() {

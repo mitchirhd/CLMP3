@@ -2,11 +2,8 @@ use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
     thread,
-    time::SystemTime,
+    time::Instant,
 };
-
-use ratatui::widgets::ListState;
-use tui_slider::SliderState;
 
 use crate::{
     audio::AudioPlayer,
@@ -18,25 +15,19 @@ pub struct AppState {
     pub player: AudioPlayer,
     selected_widget: Clmp3Widget,
     last_display_widget: Clmp3Widget,
-    volume_changed_time: Option<SystemTime>,
-    pub queue_state: ListState,
-    pub volume_state: SliderState,
+    volume_changed_time: Option<Instant>,
     pub metadata_map: Arc<RwLock<HashMap<SourceId, Arc<Metadata>>>>,
 }
 
 impl AppState {
     pub fn new(player: AudioPlayer) -> AppState {
-        let val = AppState {
+        AppState {
             player,
             selected_widget: Clmp3Widget::Player,
             last_display_widget: Clmp3Widget::Display,
             volume_changed_time: None,
-            queue_state: ListState::default(),
-            volume_state: SliderState::new(100.0, 0.0, 100.0),
             metadata_map: Arc::new(RwLock::new(HashMap::new())),
-        };
-        val.player.set_volume(val.volume_state.value() as f32);
-        val
+        }
     }
 
     pub fn selected_widget(&self) -> Clmp3Widget {
@@ -48,23 +39,19 @@ impl AppState {
         if val.area() == WidgetArea::Display {
             self.last_display_widget = val;
         }
-        if val != Clmp3Widget::Queue {
-            self.queue_state.select(None);
-            self.update_queue_state();
-        }
     }
 
     pub fn last_display_widget(&self) -> Clmp3Widget {
         self.last_display_widget
     }
 
-    pub fn set_volume_changed_time(&mut self, val: SystemTime) {
+    pub fn set_volume_changed_time(&mut self, val: Instant) {
         self.volume_changed_time = Some(val);
     }
 
     pub fn draw_volume_slider(&self) -> bool {
         if let Some(time) = self.volume_changed_time
-            && time.elapsed().expect("Time error").as_secs() < 1
+            && time.elapsed().as_secs() < 1
         {
             return true;
         }
@@ -104,16 +91,5 @@ impl AppState {
             let mut map = map.write().expect("metadata map lock poisoned");
             map.insert(id, Arc::new(metadata));
         });
-    }
-
-    pub fn on_playback_changed(&mut self) {
-        if self.player.stopped() {
-            self.queue_state.select(None);
-        }
-        self.update_queue_state(); // now reads self.player.queue().prev_len()
-    }
-
-    pub fn update_queue_state(&mut self) {
-        *self.queue_state.offset_mut() = self.player.queue.prev_len().saturating_sub(5)
     }
 }

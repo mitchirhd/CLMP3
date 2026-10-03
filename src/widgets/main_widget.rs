@@ -56,7 +56,7 @@ impl MainWidget {
     }
 
     pub fn draw(&mut self, terminal: &mut DefaultTerminal, state: &mut AppState) -> io::Result<()> {
-        terminal.draw(|frame| frame.render_stateful_widget(&*self, frame.area(), state))?;
+        terminal.draw(|frame| frame.render_stateful_widget(&mut *self, frame.area(), state))?;
         Ok(())
     }
 
@@ -84,7 +84,7 @@ impl MainWidget {
     }
 
     fn render_queue_area(
-        &self,
+        &mut self,
         queue_area: Rect,
         buf: &mut ratatui::prelude::Buffer,
         state: &mut AppState,
@@ -125,7 +125,7 @@ impl MainWidget {
                 .title(Line::from("Vol"))
                 .border_set(border::PLAIN);
 
-            let vol_slider = Slider::from_state(&state.volume_state)
+            let vol_slider = Slider::new(state.player.volume() as f64, 0.0, 100.0)
                 .orientation(SliderOrientation::Vertical)
                 .filled_symbol("█")
                 .empty_symbol("░")
@@ -156,7 +156,7 @@ impl MainWidget {
     }
 }
 
-impl StatefulWidget for &MainWidget {
+impl StatefulWidget for &mut MainWidget {
     type State = AppState;
 
     fn render(
