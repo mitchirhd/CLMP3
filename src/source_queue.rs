@@ -76,7 +76,7 @@ impl SourceQueue {
             .len()
     }
 
-    pub fn replay(&self) {
+    pub fn previous_to_current(&self) {
         let mut contents = self.contents.write().expect("queue lock poisoned");
         if let Some(item) = contents.previous.pop() {
             contents.upcoming.push_front(item);

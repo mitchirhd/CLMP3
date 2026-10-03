@@ -14,8 +14,7 @@ use ratatui::{
 use tui_slider::SliderState;
 
 use crate::{
-    app_state::AppState, audio::AudioControls, source_builder::Metadata,
-    widgets::traits::InputWidget,
+    app_state::AppState, audio::AudioPlayer, source_builder::Metadata, widgets::traits::InputWidget,
 };
 
 pub struct PlayerWidget {}
@@ -28,9 +27,7 @@ impl PlayerWidget {
     fn change_volume(state: &mut AppState, f: impl FnOnce(&mut SliderState, f64)) {
         let vol_step = 1.0;
         f(&mut state.volume_state, vol_step);
-        state
-            .player
-            .set_volume(state.volume_state.value() as f32);
+        state.player.set_volume(state.volume_state.value() as f32);
         state.set_volume_changed_time(SystemTime::now());
     }
 }
@@ -58,7 +55,7 @@ impl StatefulWidget for &PlayerWidget {
 
         render_title_bar(title_area, buf, state.current_metadata());
         render_progress_bar(progress_area, buf, state);
-        render_buttons(button_area, buf, &state.audio_controls);
+        render_buttons(button_area, buf, &state.player);
         render_volume(volume_area, buf, state);
     }
 }
@@ -98,22 +95,21 @@ fn render_progress_bar(area: Rect, buf: &mut Buffer, state: &mut AppState) {
 }
 
 fn gauge_data(state: &mut AppState) -> (f64, String) {
-    match state.player.total_duration {
-        Some(total) => {
-            let total_secs = total.as_secs_f64();
-            if total_secs != 0.0 {
-                let ratio = state.audio_controls.position().as_secs_f64() / total_secs;
-                let text = format!(
-                    "{}/{}",
-                    calculate_time_str(&state.audio_controls.position()),
-                    calculate_time_str(&total)
-                );
-                (ratio, text)
-            } else {
-                (0.0, String::from("00:00/00:00"))
-            }
+    if let Some(total) = state.player.total_duration {
+        let total_secs = total.as_secs_f64();
+        if total_secs != 0.0 {
+            let ratio = state.player.position().as_secs_f64() / total_secs;
+            let text = format!(
+                "{}/{}",
+                calculate_time_str(&state.player.position()),
+                calculate_time_str(&total)
+            );
+            (ratio, text)
+        } else {
+            (0.0, String::from("00:00/00:00"))
         }
-        None => (0.0, String::from("00:00/00:00")),
+    } else {
+        (0.0, String::from("00:00/00:00"))
     }
 }
 
@@ -124,7 +120,7 @@ fn calculate_time_str(duration: &Duration) -> String {
     format!("{:02}:{:02}", min, secs)
 }
 
-fn render_buttons(area: Rect, buf: &mut Buffer, controls: &Arc<AudioControls>) {
+fn render_buttons(area: Rect, buf: &mut Buffer, player: &AudioPlayer) {
     let button_area = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
@@ -134,8 +130,8 @@ fn render_buttons(area: Rect, buf: &mut Buffer, controls: &Arc<AudioControls>) {
         ])
         .split(area.centered_horizontally(Constraint::Ratio(1, 2)));
 
-    let stopped = controls.is_stopped();
-    let paused = controls.is_paused();
+    let stopped = player.stopped();
+    let paused = player.paused();
     let play_pause_symbol = if stopped || paused { "▶" } else { "⏸" };
 
     render_button("⏮", button_area[0], buf);
@@ -167,8 +163,8 @@ impl InputWidget for PlayerWidget {
         match key {
             KeyCode::Up => Self::change_volume(state, SliderState::increase),
             KeyCode::Down => Self::change_volume(state, SliderState::decrease),
-            KeyCode::Right => state.audio_controls.set_skip_current(true),
-            KeyCode::Left => state.audio_controls.set_previous_requested(true),
+            KeyCode::Right => state.player.skip(),
+            KeyCode::Left => state.player.previous(),
             _ => {}
         }
     }

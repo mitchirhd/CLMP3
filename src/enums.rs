@@ -4,7 +4,6 @@ pub enum Clmp3Event {
     KeyInput(KeyEvent),
     // MouseInput(MouseEvent),
     Redraw,
-    SongEnded,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]

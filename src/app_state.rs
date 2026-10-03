@@ -9,13 +9,12 @@ use ratatui::widgets::ListState;
 use tui_slider::SliderState;
 
 use crate::{
-    audio::{AudioControls, AudioPlayer},
+    audio::AudioPlayer,
     enums::{Clmp3Widget, WidgetArea},
     source_builder::{Metadata, SourceId, SourceType},
 };
 
 pub struct AppState {
-    pub audio_controls: Arc<AudioControls>,
     pub player: AudioPlayer,
     selected_widget: Clmp3Widget,
     last_display_widget: Clmp3Widget,
@@ -26,9 +25,8 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new(audio_controls: Arc<AudioControls>, player: AudioPlayer) -> AppState {
+    pub fn new(player: AudioPlayer) -> AppState {
         let val = AppState {
-            audio_controls,
             player,
             selected_widget: Clmp3Widget::Player,
             last_display_widget: Clmp3Widget::Display,
@@ -37,8 +35,7 @@ impl AppState {
             volume_state: SliderState::new(100.0, 0.0, 100.0),
             metadata_map: Arc::new(RwLock::new(HashMap::new())),
         };
-        val.player
-            .set_volume(val.volume_state.value() as f32);
+        val.player.set_volume(val.volume_state.value() as f32);
         val
     }
 
@@ -80,7 +77,7 @@ impl AppState {
     }
 
     pub fn current_metadata(&self) -> Option<Arc<Metadata>> {
-        if let Some(source) = self.player.current_source.clone() {
+        if let Some(source) = self.player.queue.peek() {
             self.metadata(&source)
         } else {
             None
@@ -107,6 +104,13 @@ impl AppState {
             let mut map = map.write().expect("metadata map lock poisoned");
             map.insert(id, Arc::new(metadata));
         });
+    }
+
+    pub fn on_playback_changed(&mut self) {
+        if self.player.stopped() {
+            self.queue_state.select(None);
+        }
+        self.update_queue_state(); // now reads self.player.queue().prev_len()
     }
 
     pub fn update_queue_state(&mut self) {

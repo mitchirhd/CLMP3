@@ -65,8 +65,7 @@ pub struct App {
 impl App {
     pub fn new() -> App {
         let (event_tx, event_rx) = mpsc::channel::<Clmp3Event>();
-        let (audio_player, audio_controls) = AudioPlayer::new(event_tx.clone());
-        let app_state = AppState::new(audio_controls, audio_player);
+        let app_state = AppState::new(AudioPlayer::new());
 
         App {
             exit: false,
@@ -141,8 +140,11 @@ impl App {
             match event {
                 Clmp3Event::KeyInput(key_event) => self.handle_key_event(key_event),
                 // Clmp3Event::MouseInput(mouse_event) => todo!(),
-                Clmp3Event::Redraw => {}
-                Clmp3Event::SongEnded => self.handle_song_ended(),
+                Clmp3Event::Redraw => {
+                    if self.app_state.player.update() {
+                        self.app_state.on_playback_changed();
+                    }
+                }
             }
             self.main_widget.draw(terminal, &mut self.app_state)?;
         }
@@ -169,31 +171,12 @@ impl App {
         }
     }
 
-    fn handle_song_ended(&mut self) {
-        let state = &mut self.app_state;
-        if state.audio_controls.previous_requested() {
-            state.player.queue.replay();
-        } else {
-            state.player.queue.current_to_previous();
-        }
-
-        state.audio_controls.reset();
-        if state.player.has_next() {
-            state.player.play_next();
-            state.update_queue_state();
-        } else {
-            state.audio_controls.set_is_stopped(true);
-            state.queue_state.select(None);
-            state.player.total_duration = Some(Duration::ZERO)
-        }
-    }
-
     fn exit_app(app: &mut App) {
         app.exit = true;
     }
 
     fn start_stop(app: &mut App) {
-        if app.app_state.player.has_next() || !app.app_state.audio_controls.is_stopped() {
+        if app.app_state.player.has_next() || !app.app_state.player.stopped() {
             app.app_state.player.start_stop();
         } else {
             app.app_state.set_selected_widget(Clmp3Widget::Load);
