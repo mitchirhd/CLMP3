@@ -60,14 +60,13 @@ pub struct App {
     main_widget: MainWidget,
     app_state: AppState,
     handler_map: HandlerMap,
-    audio_player: AudioPlayer,
 }
 
 impl App {
     pub fn new() -> App {
         let (event_tx, event_rx) = mpsc::channel::<Clmp3Event>();
-        let (audio_player, audio_controls, queue) = AudioPlayer::new(event_tx.clone());
-        let app_state = AppState::new(audio_controls, queue);
+        let (audio_player, audio_controls) = AudioPlayer::new(event_tx.clone());
+        let app_state = AppState::new(audio_controls, audio_player);
 
         App {
             exit: false,
@@ -75,12 +74,11 @@ impl App {
             event_rx,
             main_widget: MainWidget::new(),
             app_state,
-            handler_map: App::get_handler_map(),
-            audio_player,
+            handler_map: App::handler_map(),
         }
     }
 
-    fn get_handler_map() -> HandlerMap {
+    fn handler_map() -> HandlerMap {
         let mut map: HandlerMap = HashMap::new();
 
         map.insert(
@@ -174,17 +172,19 @@ impl App {
     fn handle_song_ended(&mut self) {
         let state = &mut self.app_state;
         if state.audio_controls.previous_requested() {
-            state.queue.replay();
+            state.player.queue.replay();
         } else {
-            state.queue.current_to_previous();
+            state.player.queue.current_to_previous();
         }
 
         state.audio_controls.reset();
-        if self.audio_player.has_next() {
-            self.audio_player.play_next(state);
+        if state.player.has_next() {
+            state.player.play_next();
+            state.update_queue_state();
         } else {
             state.audio_controls.set_is_stopped(true);
             state.queue_state.select(None);
+            state.player.total_duration = Some(Duration::ZERO)
         }
     }
 
@@ -193,8 +193,8 @@ impl App {
     }
 
     fn start_stop(app: &mut App) {
-        if app.audio_player.has_next() || !app.app_state.audio_controls.get_is_stopped() {
-            app.audio_player.start_stop(&mut app.app_state);
+        if app.app_state.player.has_next() || !app.app_state.audio_controls.is_stopped() {
+            app.app_state.player.start_stop();
         } else {
             app.app_state.set_selected_widget(Clmp3Widget::Load);
         }

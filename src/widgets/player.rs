@@ -29,7 +29,7 @@ impl PlayerWidget {
         let vol_step = 1.0;
         f(&mut state.volume_state, vol_step);
         state
-            .audio_controls
+            .player
             .set_volume(state.volume_state.value() as f32);
         state.set_volume_changed_time(SystemTime::now());
     }
@@ -56,8 +56,8 @@ impl StatefulWidget for &PlayerWidget {
             ])
             .areas(button_area);
 
-        render_title_bar(title_area, buf, state.get_current_metadata());
-        render_progress_bar(progress_area, buf, &state.audio_controls);
+        render_title_bar(title_area, buf, state.current_metadata());
+        render_progress_bar(progress_area, buf, state);
         render_buttons(button_area, buf, &state.audio_controls);
         render_volume(volume_area, buf, state);
     }
@@ -86,8 +86,8 @@ fn render_title_bar(area: Rect, buf: &mut Buffer, metadata: Option<Arc<Metadata>
     line.render(area.inner(Margin::new(1, 0)), buf);
 }
 
-fn render_progress_bar(area: Rect, buf: &mut Buffer, controls: &Arc<AudioControls>) {
-    let (ratio, text) = get_gauge_data(controls);
+fn render_progress_bar(area: Rect, buf: &mut Buffer, state: &mut AppState) {
+    let (ratio, text) = gauge_data(state);
 
     let gauge = LineGauge::default()
         .ratio(ratio)
@@ -97,15 +97,15 @@ fn render_progress_bar(area: Rect, buf: &mut Buffer, controls: &Arc<AudioControl
     gauge.render(area.inner(Margin::new(1, 0)), buf);
 }
 
-fn get_gauge_data(controls: &Arc<AudioControls>) -> (f64, String) {
-    match controls.get_total_duration() {
+fn gauge_data(state: &mut AppState) -> (f64, String) {
+    match state.player.total_duration {
         Some(total) => {
             let total_secs = total.as_secs_f64();
             if total_secs != 0.0 {
-                let ratio = controls.get_position().as_secs_f64() / total_secs;
+                let ratio = state.audio_controls.position().as_secs_f64() / total_secs;
                 let text = format!(
                     "{}/{}",
-                    calculate_time_str(&controls.get_position()),
+                    calculate_time_str(&state.audio_controls.position()),
                     calculate_time_str(&total)
                 );
                 (ratio, text)
@@ -134,8 +134,8 @@ fn render_buttons(area: Rect, buf: &mut Buffer, controls: &Arc<AudioControls>) {
         ])
         .split(area.centered_horizontally(Constraint::Ratio(1, 2)));
 
-    let stopped = controls.get_is_stopped();
-    let paused = controls.get_is_paused();
+    let stopped = controls.is_stopped();
+    let paused = controls.is_paused();
     let play_pause_symbol = if stopped || paused { "▶" } else { "⏸" };
 
     render_button("⏮", button_area[0], buf);

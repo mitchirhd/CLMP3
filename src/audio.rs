@@ -4,12 +4,11 @@ use rodio::source::{
 use rodio::{MixerDeviceSink, Player};
 use std::collections::VecDeque;
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::Sender;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
-use crate::app_state::AppState;
 use crate::enums::Clmp3Event;
 use crate::source_builder::SourceType;
 
@@ -98,10 +97,8 @@ impl SourceQueue {
 pub struct AudioControls {
     is_stopped: AtomicBool,
     is_paused: AtomicBool,
-    volume: Mutex<f32>,
-    current_source: Mutex<Option<SourceType>>,
-    total_duration: Mutex<Option<Duration>>,
-    position: Mutex<Duration>,
+    volume_bits: AtomicU32,
+    position_ms: AtomicU64,
     skip_current: AtomicBool,
     previous: AtomicBool,
 }
@@ -111,10 +108,8 @@ impl AudioControls {
         AudioControls {
             is_stopped: AtomicBool::new(true),
             is_paused: AtomicBool::new(false),
-            volume: Mutex::new(1.0),
-            current_source: Mutex::new(None),
-            total_duration: Mutex::new(None),
-            position: Mutex::new(Duration::ZERO),
+            volume_bits: AtomicU32::new(100.0_f32.to_bits()),
+            position_ms: AtomicU64::new(0),
             skip_current: AtomicBool::new(false),
             previous: AtomicBool::new(false),
         }
@@ -122,13 +117,11 @@ impl AudioControls {
 
     pub fn reset(&self) {
         self.set_position(Duration::ZERO);
-        self.set_current_source(None);
         self.set_skip_current(false);
         self.set_previous_requested(false);
-        self.set_total_duration(Duration::ZERO);
     }
 
-    pub fn get_is_stopped(&self) -> bool {
+    pub fn is_stopped(&self) -> bool {
         self.is_stopped.load(Ordering::Relaxed)
     }
 
@@ -136,7 +129,7 @@ impl AudioControls {
         self.is_stopped.store(val, Ordering::Relaxed);
     }
 
-    pub fn get_is_paused(&self) -> bool {
+    pub fn is_paused(&self) -> bool {
         self.is_paused.load(Ordering::Relaxed)
     }
 
@@ -144,39 +137,16 @@ impl AudioControls {
         self.is_paused.store(val, Ordering::Relaxed);
     }
 
-    pub fn get_volume(&self) -> f32 {
-        *self.volume.lock().expect("Mutex acquired")
-    }
-
-    pub fn set_volume(&self, val: f32) {
-        *self.volume.lock().expect("Mutex acquired") = val;
-    }
-
-    pub fn get_position(&self) -> Duration {
-        *self.position.lock().expect("Mutex acquired")
+    pub fn position(&self) -> Duration {
+        Duration::from_millis(self.position_ms.load(Ordering::Relaxed))
     }
 
     pub fn set_position(&self, pos: Duration) {
-        *self.position.lock().expect("Mutex acquired") = pos;
+        self.position_ms
+            .store(pos.as_millis() as u64, Ordering::Relaxed);
     }
 
-    pub fn get_total_duration(&self) -> Option<Duration> {
-        *self.total_duration.lock().expect("Mutex acquired")
-    }
-
-    pub fn set_total_duration(&self, duration: Duration) {
-        *self.total_duration.lock().expect("Mutex acquired") = Some(duration);
-    }
-
-    pub fn get_current_source(&self) -> Option<SourceType> {
-        self.current_source.lock().expect("Mutex acquired").clone()
-    }
-
-    pub fn set_current_source(&self, source: Option<SourceType>) {
-        *self.current_source.lock().expect("Mutex acquired") = source;
-    }
-
-    pub fn get_skip_current(&self) -> bool {
+    pub fn skip_current(&self) -> bool {
         self.skip_current.load(Ordering::Relaxed)
     }
 
@@ -203,14 +173,14 @@ pub struct AudioPlayer {
     _sink: MixerDeviceSink,
     player: Player,
     controls: Arc<AudioControls>,
-    queue: Arc<SourceQueue>,
+    pub queue: SourceQueue,
     event_tx: Sender<Clmp3Event>,
+    pub total_duration: Option<Duration>,
+    pub current_source: Option<SourceType>,
 }
 
 impl AudioPlayer {
-    pub fn new(
-        event_tx: Sender<Clmp3Event>,
-    ) -> (AudioPlayer, Arc<AudioControls>, Arc<SourceQueue>) {
+    pub fn new(event_tx: Sender<Clmp3Event>) -> (AudioPlayer, Arc<AudioControls>) {
         let mut handle =
             rodio::DeviceSinkBuilder::open_default_sink().expect("open default audio stream");
         handle.log_on_drop(false);
@@ -219,48 +189,47 @@ impl AudioPlayer {
 
         let controls = Arc::new(AudioControls::new());
 
-        let queue = Arc::new(SourceQueue::new());
-
         (
             AudioPlayer {
                 _sink: handle,
                 player,
                 controls: controls.clone(),
-                queue: queue.clone(),
+                queue: SourceQueue::new(),
                 event_tx,
+                total_duration: None,
+                current_source: None,
             },
             controls,
-            queue,
         )
     }
 
     pub fn can_play(path: &Path) -> bool {
-        match path.extension() {
-            Some(ext) => matches!(
-                ext.to_str().unwrap_or_default(),
-                // "mp3" | "wav" | "flac" | "ogg" | "aac" | "m4a"
-                "mp3" | "wav" | "flac" | "aac" | "m4a"
-            ),
-            None => false,
-        }
+        path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+            ["mp3", "wav", "flac", "aac", "m4a"]
+                .iter()
+                .any(|x| e.eq_ignore_ascii_case(x))
+        })
     }
 
     pub fn has_next(&self) -> bool {
         !self.queue.is_empty()
     }
 
-    pub fn start_stop(&mut self, state: &mut AppState) {
-        if self.controls.get_is_stopped() && self.has_next() {
-            self.play_next(state);
-        } else if self.controls.get_is_paused() {
+    pub fn start_stop(&mut self) {
+        if self.controls.is_stopped() && self.has_next() {
+            self.play_next();
+        } else if self.controls.is_paused() {
             self.controls.set_is_paused(false);
-            state.update_queue_state();
         } else {
             self.controls.set_is_paused(true);
         }
     }
 
-    pub fn play_next(&mut self, state: &mut AppState) {
+    pub fn set_volume(&self, vol: f32){
+        self.player.set_volume((vol/100.0).powf(2.0));
+    }
+
+    pub fn play_next(&mut self) {
         let Some(source) = self.queue.peek() else {
             return;
         };
@@ -268,18 +237,16 @@ impl AudioPlayer {
         let controls = self.controls.clone();
         controls.set_is_stopped(false);
         let source_data = source.build();
-        self.controls.set_current_source(Some(source));
+        self.current_source = Some(source);
         let queue_source = source_data
             .track_position()
-            .amplify(1.0)
             .skippable()
             .stoppable()
             .pausable(false)
             .periodic_access(Duration::from_secs_f64(1.0 / 30.0), move |src| {
                 Self::control_tick(&controls, src);
             });
-        *self.controls.total_duration.lock().expect("Mutex acquired") =
-            queue_source.total_duration();
+        self.total_duration = queue_source.total_duration();
         self.player.append(queue_source);
 
         let event_tx = self.event_tx.clone();
@@ -287,25 +254,21 @@ impl AudioPlayer {
             event_tx.send(Clmp3Event::SongEnded).unwrap();
         }));
         self.player.append(end_callback);
-        state.update_queue_state();
     }
 
     fn control_tick(controls: &AudioControls, src: &mut ControlledSource) {
-        if controls.get_is_stopped() {
+        if controls.is_stopped() {
             src.inner_mut().stop();
         } else {
-            let paused = controls.get_is_paused();
+            let paused = controls.is_paused();
             src.set_paused(paused);
         }
 
-        if controls.get_skip_current() {
+        if controls.skip_current() {
             src.inner_mut().inner_mut().skip();
         }
 
-        let amp = src.inner_mut().inner_mut().inner_mut();
-        amp.set_factor((controls.get_volume() / 100.0).powf(2.0));
-
-        let track_pos = src.inner_mut().inner_mut().inner_mut().inner_mut();
+        let track_pos = src.inner_mut().inner_mut().inner_mut();
         controls.set_position(track_pos.get_pos());
 
         if controls.previous_requested() {
@@ -320,4 +283,4 @@ impl AudioPlayer {
 }
 
 type Built = Box<dyn rodio::Source<Item = f32> + Send>;
-type ControlledSource = Pausable<Stoppable<Skippable<Amplify<TrackPosition<Built>>>>>;
+type ControlledSource = Pausable<Stoppable<Skippable<TrackPosition<Built>>>>;

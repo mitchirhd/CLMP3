@@ -9,14 +9,14 @@ use ratatui::widgets::ListState;
 use tui_slider::SliderState;
 
 use crate::{
-    audio::{AudioControls, SourceQueue},
+    audio::{AudioControls, AudioPlayer},
     enums::{Clmp3Widget, WidgetArea},
     source_builder::{Metadata, SourceId, SourceType},
 };
 
 pub struct AppState {
     pub audio_controls: Arc<AudioControls>,
-    pub queue: Arc<SourceQueue>,
+    pub player: AudioPlayer,
     selected_widget: Clmp3Widget,
     last_display_widget: Clmp3Widget,
     volume_changed_time: Option<SystemTime>,
@@ -26,10 +26,10 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new(audio_controls: Arc<AudioControls>, queue: Arc<SourceQueue>) -> AppState {
+    pub fn new(audio_controls: Arc<AudioControls>, player: AudioPlayer) -> AppState {
         let val = AppState {
             audio_controls,
-            queue,
+            player,
             selected_widget: Clmp3Widget::Player,
             last_display_widget: Clmp3Widget::Display,
             volume_changed_time: None,
@@ -37,12 +37,12 @@ impl AppState {
             volume_state: SliderState::new(100.0, 0.0, 100.0),
             metadata_map: Arc::new(RwLock::new(HashMap::new())),
         };
-        val.audio_controls
+        val.player
             .set_volume(val.volume_state.value() as f32);
         val
     }
 
-    pub fn get_selected_widget(&self) -> Clmp3Widget {
+    pub fn selected_widget(&self) -> Clmp3Widget {
         self.selected_widget
     }
 
@@ -57,7 +57,7 @@ impl AppState {
         }
     }
 
-    pub fn get_last_display_widget(&self) -> Clmp3Widget {
+    pub fn last_display_widget(&self) -> Clmp3Widget {
         self.last_display_widget
     }
 
@@ -74,14 +74,14 @@ impl AppState {
         false
     }
 
-    pub fn get_metadata(&self, source: &SourceType) -> Option<Arc<Metadata>> {
+    pub fn metadata(&self, source: &SourceType) -> Option<Arc<Metadata>> {
         let id = source.id()?;
         self.metadata_map.read().unwrap().get(&id).cloned()
     }
 
-    pub fn get_current_metadata(&self) -> Option<Arc<Metadata>> {
-        if let Some(source) = self.audio_controls.get_current_source() {
-            self.get_metadata(&source)
+    pub fn current_metadata(&self) -> Option<Arc<Metadata>> {
+        if let Some(source) = self.player.current_source.clone() {
+            self.metadata(&source)
         } else {
             None
         }
@@ -110,6 +110,6 @@ impl AppState {
     }
 
     pub fn update_queue_state(&mut self) {
-        *self.queue_state.offset_mut() = self.queue.prev_len().saturating_sub(5)
+        *self.queue_state.offset_mut() = self.player.queue.prev_len().saturating_sub(5)
     }
 }

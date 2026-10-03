@@ -21,7 +21,9 @@ impl QueueWidget {
 
     fn select(state: &mut AppState, f: impl FnOnce(&mut ListState)) {
         if state.queue_state.selected().is_none() {
-            state.queue_state.select(Some(state.queue.prev_len()));
+            state
+                .queue_state
+                .select(Some(state.player.queue.prev_len()));
             return;
         }
         f(&mut state.queue_state);
@@ -44,7 +46,7 @@ impl StatefulWidget for &QueueWidget {
         state: &mut AppState,
     ) {
         let map = state.metadata_map.read().unwrap();
-        let (prev_len, sources) = state.queue.snapshot();
+        let (prev_len, sources) = state.player.queue.snapshot();
 
         let items: Vec<ListItem> = sources
             .into_iter()
@@ -75,9 +77,9 @@ impl StatefulWidget for &QueueWidget {
 fn label(source: &SourceType, metadata: Option<&Metadata>) -> String {
     match source {
         SourceType::SineWave(freq, _) => format!("Sine {freq}"),
-        SourceType::File(file) => match metadata {
+        SourceType::File(path) => match metadata {
             Some(m) => format!("{} - {}", m.title, m.artist.as_deref().unwrap_or("unknown")),
-            None => file.name.to_string(),
+            None => crate::source_builder::file_name(path)
         },
     }
 }

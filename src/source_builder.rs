@@ -1,15 +1,12 @@
-use std::{path::PathBuf, time::Duration};
+use std::{fs::File, path::PathBuf, time::Duration};
 
 use lofty::{file::TaggedFileExt, probe::Probe, tag::Accessor};
-use ratatui_explorer::File;
 use rodio::{Decoder, Source, source::SineWave};
-
-use std::fs::File as StdFile;
 
 #[derive(Clone)]
 pub enum SourceType {
     SineWave(f32, Duration),
-    File(File),
+    File(PathBuf),
 }
 
 impl SourceType {
@@ -18,8 +15,8 @@ impl SourceType {
             SourceType::SineWave(freq, duration) => {
                 Box::new(SineWave::new(*freq).take_duration(*duration))
             }
-            SourceType::File(file) => Box::new(
-                Decoder::try_from(StdFile::open(&file.path).expect("Could not open file"))
+            SourceType::File(path) => Box::new(
+                Decoder::try_from(File::open(&path).expect("Could not open file"))
                     .expect("Could not decode audio"),
             ),
         }
@@ -28,9 +25,15 @@ impl SourceType {
     pub fn id(&self) -> Option<SourceId> {
         match self {
             SourceType::SineWave(_, _) => None,
-            SourceType::File(file) => Some(SourceId::File(file.path.clone())),
+            SourceType::File(path) => Some(SourceId::File(path.clone())),
         }
     }
+}
+
+pub fn file_name(path: &PathBuf) -> String {
+    path.file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default()
 }
 
 #[derive(Hash, PartialEq, Eq, Clone, Debug)]
@@ -54,8 +57,8 @@ impl Metadata {
         }
     }
 
-    pub fn from_file(file: &File) -> Metadata {
-        let tag = Probe::open(&file.path)
+    pub fn from_file(path: &PathBuf) -> Metadata {
+        let tag = Probe::open(path)
             .and_then(|probe| probe.read())
             .ok()
             .and_then(|tagged_file| {
@@ -69,7 +72,7 @@ impl Metadata {
             .as_ref()
             .and_then(|t| t.title())
             .map(|t| t.to_string())
-            .unwrap_or_else(|| file.name.clone());
+            .unwrap_or_else(|| file_name(path));
 
         let artist = tag.as_ref().and_then(|t| t.artist()).map(|a| a.to_string());
 
