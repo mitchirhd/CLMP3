@@ -67,10 +67,9 @@ impl AudioPlayer {
     }
 
     pub fn position(&self) -> Duration {
-        if let Some(total) = self.total_duration{
+        if let Some(total) = self.total_duration {
             self.player.get_pos().min(total) // total duration is updated one tick before player.position
-        }
-        else{
+        } else {
             Duration::ZERO
         }
     }

@@ -47,7 +47,10 @@ impl LoadWidget {
             return;
         }
 
-        state.player.queue.enqueue(SourceType::File(file.path.clone()));
+        state
+            .player
+            .queue
+            .enqueue(SourceType::File(file.path.clone()));
         let id = SourceId::File(file.path.clone());
         state.spawn_metadata_load(id, move || Metadata::from_file(&file.path));
     }

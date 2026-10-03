@@ -79,7 +79,7 @@ fn label(source: &SourceType, metadata: Option<&Metadata>) -> String {
         SourceType::SineWave(freq, _) => format!("Sine {freq}"),
         SourceType::File(path) => match metadata {
             Some(m) => format!("{} - {}", m.title, m.artist.as_deref().unwrap_or("unknown")),
-            None => crate::source_builder::file_name(path)
+            None => crate::source_builder::file_name(path),
         },
     }
 }
