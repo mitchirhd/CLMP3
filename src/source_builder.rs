@@ -1,5 +1,6 @@
 use std::{
-    fs::File,
+    fs::{self},
+    io::Cursor,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -18,10 +19,10 @@ impl SourceType {
             SourceType::SineWave(freq, duration) => {
                 Box::new(SineWave::new(*freq).take_duration(*duration))
             }
-            SourceType::File(path) => Box::new(
-                Decoder::try_from(File::open(path).expect("Could not open file"))
-                    .expect("Could not decode audio"),
-            ),
+            SourceType::File(path) => {
+                let bytes = fs::read(path).expect("Could not open file");
+                Box::new(Decoder::try_from(Cursor::new(bytes)).expect("Could not decode audio"))
+            }
         }
     }
 
