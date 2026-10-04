@@ -12,26 +12,6 @@ use ratatui::DefaultTerminal;
 use crate::{app_state::AppState, audio::AudioPlayer, enums::Clmp3Event};
 use crate::{enums::Clmp3Widget, widgets::main_widget::MainWidget};
 
-const NAV_MODIFIERS: [KeyModifiers; 3] = [
-    KeyModifiers::NONE,
-    KeyModifiers::CONTROL,
-    KeyModifiers::SHIFT,
-];
-
-const NAV_KEYS: [KeyCode; 11] = [
-    KeyCode::Up,
-    KeyCode::Down,
-    KeyCode::Left,
-    KeyCode::Right,
-    KeyCode::Enter,
-    KeyCode::Backspace,
-    KeyCode::Delete,
-    KeyCode::End,
-    KeyCode::Home,
-    KeyCode::PageUp,
-    KeyCode::PageDown,
-];
-
 fn handle_input_events(tx: Sender<Clmp3Event>) {
     while let Ok(event) = crossterm::event::read() {
         let msg = match event {
@@ -114,6 +94,11 @@ impl App {
             App::start_stop,
         );
 
+        map.insert(
+            (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Char('s')),
+            |app| app.app_state.player.queue.shuffle(),
+        );
+
         map
     }
 
@@ -161,9 +146,9 @@ impl App {
 
         if let Some(handler) = self.handler_map.get(&(kind, modifiers, code)).copied() {
             handler(self);
-        } else if NAV_KEYS.contains(&code) && NAV_MODIFIERS.contains(&modifiers) {
+        } else {
             self.main_widget
-                .on_navigation_key(modifiers, code, &mut self.app_state);
+                .widget_controls(modifiers, code, &mut self.app_state);
         }
     }
 

@@ -3,6 +3,8 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
+use rand::{rng, seq::SliceRandom};
+
 use crate::source_builder::SourceType;
 
 struct SourceQueueContents {
@@ -85,6 +87,17 @@ impl SourceQueue {
             contents.upcoming.push_front(item);
         }
     }
+
+    fn shuffle(&self) {
+        let upcoming = &mut self.contents.write().expect("queue lock poisoned").upcoming;
+        if upcoming.len() > 1 {
+            upcoming
+                .make_contiguous()
+                .split_at_mut(1)
+                .1
+                .shuffle(&mut rng());
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -125,5 +138,9 @@ impl SharedQueue {
 
     pub fn enqueue(&self, item: SourceType) {
         self.inner.lock().unwrap().enqueue(item);
+    }
+
+    pub fn shuffle(&self) {
+        self.inner.lock().unwrap().shuffle();
     }
 }
