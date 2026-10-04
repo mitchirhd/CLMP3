@@ -13,7 +13,7 @@ use ratatui::{
 };
 
 use crate::{
-    app_state::AppState, audio::AudioPlayer, source_builder::Metadata, widgets::traits::InputWidget,
+    app_state::AppState, audio::AudioPlayer, metadata::Metadata, widgets::traits::InputWidget,
 };
 
 const VOL_STEP: f32 = 1.0;

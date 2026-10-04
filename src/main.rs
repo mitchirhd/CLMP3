@@ -5,6 +5,7 @@ mod widgets;
 use app::App;
 mod app_state;
 mod audio;
+mod metadata;
 mod source_builder;
 mod source_queue;
 

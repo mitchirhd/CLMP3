@@ -8,7 +8,8 @@ use std::{
 use crate::{
     audio::AudioPlayer,
     enums::{Clmp3Widget, WidgetArea},
-    source_builder::{Metadata, SourceId, SourceType},
+    metadata::{Metadata, MetadataLoader},
+    source_builder::{SourceId, SourceType},
 };
 
 pub struct AppState {
@@ -16,17 +17,20 @@ pub struct AppState {
     selected_widget: Clmp3Widget,
     last_display_widget: Clmp3Widget,
     volume_changed_time: Option<Instant>,
+    pub metadata_loader: MetadataLoader,
     pub metadata_map: Arc<RwLock<HashMap<SourceId, Arc<Metadata>>>>,
 }
 
 impl AppState {
     pub fn new(player: AudioPlayer) -> AppState {
+        let metadata_map = Arc::new(RwLock::new(HashMap::new()));
         AppState {
             player,
             selected_widget: Clmp3Widget::Player,
             last_display_widget: Clmp3Widget::Display,
             volume_changed_time: None,
-            metadata_map: Arc::new(RwLock::new(HashMap::new())),
+            metadata_loader: MetadataLoader::new(metadata_map.clone()),
+            metadata_map,
         }
     }
 

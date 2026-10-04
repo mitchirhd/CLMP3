@@ -5,7 +5,7 @@ use ratatui_explorer::{FileExplorer, FileExplorerBuilder, Input, Theme};
 use crate::{
     app_state::AppState,
     audio::AudioPlayer,
-    source_builder::{Metadata, SourceId, SourceType},
+    source_builder::{SourceId, SourceType},
     widgets::traits::InputWidget,
 };
 
@@ -52,7 +52,8 @@ impl LoadWidget {
             .queue
             .enqueue(SourceType::File(file.path.clone()));
         let id = SourceId::File(file.path.clone());
-        state.spawn_metadata_load(id, move || Metadata::from_file(&file.path));
+        // state.spawn_metadata_load(id, move || Metadata::from_file(&file.path));
+        state.metadata_loader.load(id, file.path);
     }
 }
 

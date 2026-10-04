@@ -7,9 +7,7 @@ use ratatui::{
 };
 
 use crate::{
-    app_state::AppState,
-    enums::Clmp3Widget,
-    source_builder::{Metadata, SourceType},
+    app_state::AppState, enums::Clmp3Widget, metadata::Metadata, source_builder::SourceType,
     widgets::traits::InputWidget,
 };
 
