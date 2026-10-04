@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
-    thread,
     time::Instant,
 };
 
@@ -17,7 +16,7 @@ pub struct AppState {
     selected_widget: Clmp3Widget,
     last_display_widget: Clmp3Widget,
     volume_changed_time: Option<Instant>,
-    pub metadata_loader: MetadataLoader,
+    pub metadata_loader: Arc<MetadataLoader>,
     pub metadata_map: Arc<RwLock<HashMap<SourceId, Arc<Metadata>>>>,
 }
 
@@ -29,7 +28,7 @@ impl AppState {
             selected_widget: Clmp3Widget::Player,
             last_display_widget: Clmp3Widget::Display,
             volume_changed_time: None,
-            metadata_loader: MetadataLoader::new(metadata_map.clone()),
+            metadata_loader: Arc::new(MetadataLoader::new(metadata_map.clone())),
             metadata_map,
         }
     }
@@ -73,27 +72,5 @@ impl AppState {
         } else {
             None
         }
-    }
-
-    pub fn spawn_metadata_load(
-        &self,
-        id: SourceId,
-        load: impl FnOnce() -> Metadata + Send + 'static,
-    ) {
-        if self
-            .metadata_map
-            .read()
-            .expect("metadata map lock poisoned")
-            .contains_key(&id)
-        {
-            return;
-        }
-
-        let map = Arc::clone(&self.metadata_map);
-        thread::spawn(move || {
-            let metadata = load();
-            let mut map = map.write().expect("metadata map lock poisoned");
-            map.insert(id, Arc::new(metadata));
-        });
     }
 }

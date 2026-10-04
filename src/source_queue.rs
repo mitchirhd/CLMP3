@@ -1,4 +1,7 @@
-use std::{collections::VecDeque, sync::RwLock};
+use std::{
+    collections::VecDeque,
+    sync::{Arc, Mutex, RwLock},
+};
 
 use crate::source_builder::SourceType;
 
@@ -7,12 +10,12 @@ struct SourceQueueContents {
     upcoming: VecDeque<SourceType>,
 }
 
-pub struct SourceQueue {
+struct SourceQueue {
     contents: RwLock<SourceQueueContents>,
 }
 
 impl SourceQueue {
-    pub fn new() -> SourceQueue {
+    fn new() -> SourceQueue {
         SourceQueue {
             contents: RwLock::new(SourceQueueContents {
                 previous: Vec::new(),
@@ -21,7 +24,7 @@ impl SourceQueue {
         }
     }
 
-    pub fn enqueue(&self, item: SourceType) {
+    fn enqueue(&self, item: SourceType) {
         self.contents
             .write()
             .expect("RwLock acquired")
@@ -29,7 +32,7 @@ impl SourceQueue {
             .push_back(item);
     }
 
-    pub fn current_to_previous(&self) {
+    fn current_to_previous(&self) {
         let mut contents = self.contents.write().expect("queue lock poisoned");
 
         if let Some(item) = contents.upcoming.pop_front() {
@@ -37,7 +40,7 @@ impl SourceQueue {
         }
     }
 
-    pub fn peek(&self) -> Option<SourceType> {
+    fn peek(&self) -> Option<SourceType> {
         self.contents
             .read()
             .expect("RwLock acquired")
@@ -46,7 +49,7 @@ impl SourceQueue {
             .cloned()
     }
 
-    pub fn is_empty(&self) -> bool {
+    fn is_empty(&self) -> bool {
         self.contents
             .read()
             .expect("RwLock acquired")
@@ -54,7 +57,7 @@ impl SourceQueue {
             .is_empty()
     }
 
-    pub fn snapshot(&self) -> (usize, Vec<SourceType>) {
+    fn snapshot(&self) -> (usize, Vec<SourceType>) {
         let contents = self.contents.read().expect("queue lock poisoned");
         let prev_len = contents.previous.len();
 
@@ -68,7 +71,7 @@ impl SourceQueue {
         (prev_len, items)
     }
 
-    pub fn prev_len(&self) -> usize {
+    fn prev_len(&self) -> usize {
         self.contents
             .read()
             .expect("RwLock acquired")
@@ -76,10 +79,51 @@ impl SourceQueue {
             .len()
     }
 
-    pub fn previous_to_current(&self) {
+    fn previous_to_current(&self) {
         let mut contents = self.contents.write().expect("queue lock poisoned");
         if let Some(item) = contents.previous.pop() {
             contents.upcoming.push_front(item);
         }
+    }
+}
+
+#[derive(Clone)]
+pub struct SharedQueue {
+    inner: Arc<Mutex<SourceQueue>>,
+}
+
+impl SharedQueue {
+    pub fn new() -> SharedQueue {
+        SharedQueue {
+            inner: Arc::new(Mutex::new(SourceQueue::new())),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.inner.lock().unwrap().is_empty()
+    }
+
+    pub fn previous_to_current(&self) {
+        self.inner.lock().unwrap().previous_to_current();
+    }
+
+    pub fn current_to_previous(&self) {
+        self.inner.lock().unwrap().current_to_previous();
+    }
+
+    pub fn peek(&self) -> Option<SourceType> {
+        self.inner.lock().unwrap().peek()
+    }
+
+    pub fn prev_len(&self) -> usize {
+        self.inner.lock().unwrap().prev_len()
+    }
+
+    pub fn snapshot(&self) -> (usize, Vec<SourceType>) {
+        self.inner.lock().unwrap().snapshot()
+    }
+
+    pub fn enqueue(&self, item: SourceType) {
+        self.inner.lock().unwrap().enqueue(item);
     }
 }

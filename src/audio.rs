@@ -3,14 +3,14 @@ use rodio::{MixerDeviceSink, Player};
 use std::path::Path;
 use std::time::Duration;
 
-use crate::source_queue::SourceQueue;
+use crate::source_queue::SharedQueue;
 
 const RESTART_THRESHOLD: Duration = Duration::from_secs(1);
 
 pub struct AudioPlayer {
     _sink: MixerDeviceSink,
     player: Player,
-    pub queue: SourceQueue,
+    pub queue: SharedQueue,
     pub total_duration: Option<Duration>,
     stopped: bool,
     volume: f32,
@@ -27,7 +27,7 @@ impl AudioPlayer {
         AudioPlayer {
             _sink: handle,
             player,
-            queue: SourceQueue::new(),
+            queue: SharedQueue::new(),
             total_duration: None,
             stopped: true,
             volume: 100.0,

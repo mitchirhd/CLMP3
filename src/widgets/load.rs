@@ -1,3 +1,5 @@
+use std::{fs, path::Path, sync::Arc, thread};
+
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::widgets::{Widget, WidgetRef};
 use ratatui_explorer::{FileExplorer, FileExplorerBuilder, Input, Theme};
@@ -5,7 +7,9 @@ use ratatui_explorer::{FileExplorer, FileExplorerBuilder, Input, Theme};
 use crate::{
     app_state::AppState,
     audio::AudioPlayer,
+    metadata::MetadataLoader,
     source_builder::{SourceId, SourceType},
+    source_queue::SharedQueue,
     widgets::traits::InputWidget,
 };
 
@@ -32,28 +36,68 @@ impl LoadWidget {
         LoadWidget { file_explorer }
     }
 
-    fn open_current(&mut self, state: &mut AppState) -> Input {
-        if self.file_explorer.current().is_dir {
-            Input::Right
+    fn open_current(&mut self, modifier: KeyModifiers, state: &mut AppState) -> Input {
+        let current = self.file_explorer.current();
+        if current.is_dir {
+            if modifier == KeyModifiers::SHIFT {
+                Self::load_dir(
+                    state.player.queue.clone(),
+                    state.metadata_loader.clone(),
+                    &current.path.clone(),
+                );
+                Input::None
+            } else {
+                Input::Right
+            }
         } else {
-            self.load_current_file(state);
+            Self::load_file(
+                state.player.queue.clone(),
+                state.metadata_loader.clone(),
+                &current.path.clone(),
+            );
             Input::None
         }
     }
 
-    fn load_current_file(&mut self, state: &mut AppState) {
-        let file = self.file_explorer.current().clone();
-        if !file.is_file() || !AudioPlayer::can_play(&file.path) {
+    fn load_file(queue: SharedQueue, loader: Arc<MetadataLoader>, path: &Path) {
+        let path = path.to_path_buf();
+        thread::spawn(move || {
+            Self::load_file_internal(&queue, &loader, &path);
+        });
+    }
+
+    fn load_file_internal(queue: &SharedQueue, loader: &Arc<MetadataLoader>, path: &Path) {
+        let file = fs::metadata(path).unwrap();
+        if !file.is_file() || !AudioPlayer::can_play(path) {
             return;
         }
 
-        state
-            .player
-            .queue
-            .enqueue(SourceType::File(file.path.clone()));
-        let id = SourceId::File(file.path.clone());
-        // state.spawn_metadata_load(id, move || Metadata::from_file(&file.path));
-        state.metadata_loader.load(id, file.path);
+        queue.enqueue(SourceType::File(path.to_path_buf()));
+        let id = SourceId::File(path.to_path_buf());
+        loader.load(id, path.to_path_buf());
+    }
+
+    fn load_dir(queue: SharedQueue, loader: Arc<MetadataLoader>, start_path: &Path) {
+        let start_path = start_path.to_path_buf();
+        thread::spawn(move || {
+            Self::load_dir_internal(&queue, &loader, &start_path);
+        });
+    }
+
+    fn load_dir_internal(queue: &SharedQueue, loader: &Arc<MetadataLoader>, start_path: &Path) {
+        let Ok(dir) = fs::read_dir(start_path.to_string_lossy().into_owned()) else {
+            return;
+        };
+        for dir_entry in dir {
+            let Ok(dir_entry) = dir_entry else {
+                continue;
+            };
+            if dir_entry.file_type().unwrap().is_dir() {
+                Self::load_dir_internal(queue, loader, &dir_entry.path());
+            } else {
+                Self::load_file_internal(queue, loader, &dir_entry.path());
+            }
+        }
     }
 }
 
@@ -67,10 +111,10 @@ impl Widget for &LoadWidget {
 }
 
 impl InputWidget for LoadWidget {
-    fn on_input(&mut self, _modifier: KeyModifiers, key: KeyCode, state: &mut AppState) {
+    fn on_input(&mut self, modifier: KeyModifiers, key: KeyCode, state: &mut AppState) {
         let input = match key {
             KeyCode::Left | KeyCode::Backspace => Input::Left,
-            KeyCode::Right | KeyCode::Enter => self.open_current(state),
+            KeyCode::Right | KeyCode::Enter => self.open_current(modifier, state),
             KeyCode::Up => Input::Up,
             KeyCode::Down => Input::Down,
             KeyCode::Home => Input::Home,
