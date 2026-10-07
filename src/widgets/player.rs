@@ -8,12 +8,21 @@ use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Margin, Rect},
     style::Style,
+    symbols::border,
     text::{Line, Span},
-    widgets::{LineGauge, Paragraph, StatefulWidget, Widget},
+    widgets::{Block, LineGauge, Paragraph, StatefulWidget, Widget},
 };
 
 use crate::{
-    app_state::AppState, audio::AudioPlayer, metadata::Metadata, widgets::traits::InputWidget,
+    app_state::AppState,
+    enums::{Clmp3Widget, WidgetArea},
+    metadata::Metadata,
+    widgets::{
+        render_helper::{
+            border_button_style, border_title_first_style, border_title_style, thickness,
+        },
+        traits::InputWidget,
+    },
 };
 
 const VOL_STEP: f32 = 1.0;
@@ -53,62 +62,103 @@ impl StatefulWidget for &PlayerWidget {
     where
         Self: Sized,
     {
-        let [title_area, progress_area, button_area] = Layout::default()
+        let (thickness, style) = thickness(WidgetArea::Player, state);
+        let (bottom_title_left, bottom_title_right) = border_title_bottom(state, thickness);
+        let player_block = Block::bordered()
+            .title(border_title(state))
+            .title_bottom(bottom_title_left)
+            .title_bottom(bottom_title_right)
+            .border_set(thickness)
+            .border_style(style);
+
+        let [progress_area, rest_area] = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Max(1), Constraint::Max(2), Constraint::Max(3)])
-            .areas(area);
+            .constraints([Constraint::Max(2), Constraint::Length(3)])
+            .areas(player_block.inner(area));
 
-        let [_, button_area, volume_area] = Layout::default()
+        let [title_area, volume_area] = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Fill(1),
-                Constraint::Fill(1),
-                Constraint::Fill(1),
-            ])
-            .areas(button_area);
+            .constraints([Constraint::Fill(1), Constraint::Fill(1)])
+            .areas(rest_area);
 
-        render_title_bar(title_area, buf, state.current_metadata());
+        render_song_infos(title_area, buf, state.current_metadata());
         render_progress_bar(progress_area, buf, state);
-        render_buttons(button_area, buf, &state.player);
         self.render_volume(volume_area, buf, state);
+        player_block.render(area, buf);
     }
 }
 
-fn render_title_bar(area: Rect, buf: &mut Buffer, metadata: Option<Arc<Metadata>>) {
+fn border_title(state: &AppState) -> Line<'static> {
+    let spans = vec![
+        Span::styled(" p", border_title_first_style(Clmp3Widget::Player, state)),
+        Span::styled("layer ", border_title_style(Clmp3Widget::Player, state)),
+    ];
+    Line::from(spans)
+}
+
+fn border_title_bottom(
+    state: &mut AppState,
+    border: border::Set<'static>,
+) -> (Line<'static>, Line<'static>) {
+    let play_pause_symbol = if state.player.stopped() || state.player.paused() {
+        "▶"
+    } else {
+        "⏸"
+    };
+
+    let button_style = border_button_style(Clmp3Widget::Player, state);
+
+    let left_spans = vec![
+        Span::styled(" ⏮ left arrow ", button_style),
+        Span::raw(border.horizontal_top),
+        Span::raw(border.horizontal_top),
+        Span::styled(
+            format!(" {play_pause_symbol}  space "),
+            Style::default().light_blue(),
+        ),
+        Span::raw(border.horizontal_top),
+        Span::raw(border.horizontal_top),
+        Span::styled(" ⏭ right arrow ", button_style),
+    ];
+
+    (
+        Line::from(left_spans).left_aligned(),
+        Line::styled(" ↑ vol ↓ ", button_style).right_aligned(),
+    )
+}
+
+fn render_song_infos(area: Rect, buf: &mut Buffer, metadata: Option<Arc<Metadata>>) {
     let Some(metadata) = metadata else { return };
 
-    let mut delimiter1 = Span::default();
-    if metadata.artist.is_some() || metadata.album.is_some() {
-        delimiter1 = Span::from(" - ");
-    }
+    let [title_area, artist_area, album_area] = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Length(1),
+    ])
+    .horizontal_margin(1)
+    .areas(area);
 
-    let mut delimiter2 = Span::default();
-    if metadata.artist.is_some() && metadata.album.is_some() {
-        delimiter2 = Span::from(", ");
-    }
-
-    let line = Line::from_iter([
-        Span::from(&metadata.title),
-        delimiter1,
-        Span::from(metadata.artist.as_deref().unwrap_or("")),
-        delimiter2,
-        Span::from(metadata.album.as_deref().unwrap_or("")),
-    ]);
-    line.render(area.inner(Margin::new(1, 0)), buf);
+    Line::raw(&metadata.title).render(title_area, buf);
+    Line::raw(metadata.artist.as_deref().unwrap_or(""))
+        .style(Style::default().dark_gray())
+        .render(artist_area, buf);
+    Line::raw(metadata.album.as_deref().unwrap_or(""))
+        .style(Style::default().dark_gray())
+        .render(album_area, buf);
 }
 
-fn render_progress_bar(area: Rect, buf: &mut Buffer, state: &mut AppState) {
+fn render_progress_bar(area: Rect, buf: &mut Buffer, state: &AppState) {
     let (ratio, text) = gauge_data(state);
 
     let gauge = LineGauge::default()
         .ratio(ratio)
         .label(text)
-        .filled_style(Style::new().gray().on_white())
+        .filled_style(Style::new().blue().on_light_blue())
         .unfilled_style(Style::new().white());
     gauge.render(area.inner(Margin::new(1, 0)), buf);
 }
 
-fn gauge_data(state: &mut AppState) -> (f64, String) {
+fn gauge_data(state: &AppState) -> (f64, String) {
     if let Some(total) = state.player.total_duration {
         let total_secs = total.as_secs_f64();
         if total_secs != 0.0 {
@@ -132,29 +182,6 @@ fn calculate_time_str(duration: &Duration) -> String {
     let min = total_secs / 60;
     let secs = total_secs % 60;
     format!("{:02}:{:02}", min, secs)
-}
-
-fn render_buttons(area: Rect, buf: &mut Buffer, player: &AudioPlayer) {
-    let button_area = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Fill(1),
-            Constraint::Fill(1),
-            Constraint::Fill(1),
-        ])
-        .split(area.centered_horizontally(Constraint::Ratio(1, 2)));
-
-    let stopped = player.stopped();
-    let paused = player.paused();
-    let play_pause_symbol = if stopped || paused { "▶" } else { "⏸" };
-
-    render_button("⏮", button_area[0], buf);
-    render_button(play_pause_symbol, button_area[1], buf);
-    render_button("⏭", button_area[2], buf);
-}
-
-fn render_button(label: &str, area: Rect, buf: &mut Buffer) {
-    Paragraph::new(label).centered().render(area, buf);
 }
 
 impl InputWidget for PlayerWidget {

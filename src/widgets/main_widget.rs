@@ -4,7 +4,14 @@ use crate::{
     app_state::AppState,
     enums::{Clmp3Widget, WidgetArea},
     widgets::{
-        display::DisplayWidget, load::LoadWidget, player::PlayerWidget, queue::QueueWidget,
+        display::DisplayWidget,
+        load::LoadWidget,
+        player::PlayerWidget,
+        queue::QueueWidget,
+        render_helper::{
+            border_button_style, border_title_first_style, border_title_style, messages_widget,
+            thickness,
+        },
         traits::InputWidget,
     },
 };
@@ -14,12 +21,14 @@ use ratatui::{
     DefaultTerminal,
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Margin, Rect},
-    style::Style,
     symbols::border,
-    text::Line,
+    text::{Line, Span},
     widgets::{Block, StatefulWidget, Widget},
 };
 use tui_slider::{Slider, SliderOrientation};
+
+const MIN_TERMINAL_HEIGHT: u16 = 20;
+const MIN_TERMINAL_WIDTH: u16 = 80;
 
 pub struct MainWidget {
     player_widget: PlayerWidget,
@@ -38,12 +47,7 @@ impl MainWidget {
         }
     }
 
-    pub fn on_navigation_key(
-        &mut self,
-        modifier: KeyModifiers,
-        key: KeyCode,
-        state: &mut AppState,
-    ) {
+    pub fn widget_controls(&mut self, modifier: KeyModifiers, key: KeyCode, state: &mut AppState) {
         let input_widget: Option<&mut dyn InputWidget> = match state.selected_widget() {
             Clmp3Widget::Player => Some(&mut self.player_widget),
             Clmp3Widget::Display => None,
@@ -56,7 +60,18 @@ impl MainWidget {
     }
 
     pub fn draw(&mut self, terminal: &mut DefaultTerminal, state: &mut AppState) -> io::Result<()> {
-        terminal.draw(|frame| frame.render_stateful_widget(&mut *self, frame.area(), state))?;
+        if terminal.size().unwrap().width < MIN_TERMINAL_WIDTH
+            || terminal.size().unwrap().height < MIN_TERMINAL_HEIGHT
+        {
+            let msg = messages_widget(&[
+                String::from("Terminal too small"),
+                format!("Minimal width: {MIN_TERMINAL_WIDTH} lines"),
+                format!("Minimal height: {MIN_TERMINAL_HEIGHT} lines"),
+            ]);
+            terminal.draw(|frame| frame.render_widget(&msg, frame.area()))?;
+        } else {
+            terminal.draw(|frame| frame.render_stateful_widget(&mut *self, frame.area(), state))?;
+        }
         Ok(())
     }
 
@@ -66,9 +81,10 @@ impl MainWidget {
         buf: &mut ratatui::prelude::Buffer,
         state: &mut AppState,
     ) {
-        let (thickness, style) = self.thickness(WidgetArea::Display, state);
+        let (thickness, style) = thickness(WidgetArea::Display, state);
         let display_block = Block::bordered()
-            .title(Line::from(" Display Area "))
+            .title(display_border_title(state, thickness))
+            .title_bottom(display_border_bottom_title(state, thickness).unwrap_or_default())
             .border_set(thickness)
             .border_style(style);
 
@@ -89,16 +105,7 @@ impl MainWidget {
         buf: &mut ratatui::prelude::Buffer,
         state: &mut AppState,
     ) {
-        let (thickness, style) = self.thickness(WidgetArea::Queue, state);
-        let queue_block = Block::bordered()
-            .title(Line::from(" Queue Area "))
-            .border_set(thickness)
-            .border_style(style);
-
-        self.queue_widget
-            .render(queue_block.inner(queue_area), buf, state);
-
-        queue_block.render(queue_area, buf);
+        self.queue_widget.render(queue_area, buf, state);
     }
 
     fn render_player_area(
@@ -107,16 +114,7 @@ impl MainWidget {
         buf: &mut ratatui::prelude::Buffer,
         state: &mut AppState,
     ) {
-        let (thickness, style) = self.thickness(WidgetArea::Player, state);
-        let player_block = Block::bordered()
-            .title(Line::from(" Player Area "))
-            .border_set(thickness)
-            .border_style(style);
-
-        self.player_widget
-            .render(player_block.inner(player_area), buf, state);
-
-        player_block.render(player_area, buf);
+        self.player_widget.render(player_area, buf, state);
     }
 
     fn render_volume_slider(&self, area: Rect, buf: &mut Buffer, state: &mut AppState) {
@@ -146,14 +144,6 @@ impl MainWidget {
             );
         }
     }
-
-    fn thickness(&self, check: WidgetArea, state: &AppState) -> (border::Set<'static>, Style) {
-        if state.selected_widget().area() == check {
-            (border::THICK, Style::default().blue())
-        } else {
-            (border::PLAIN, Style::default().white())
-        }
-    }
 }
 
 impl StatefulWidget for &mut MainWidget {
@@ -167,11 +157,9 @@ impl StatefulWidget for &mut MainWidget {
     ) where
         Self: Sized,
     {
-        // let player_height = ((area.height as f32 * 0.15f32) as u16).clamp(10, 50);
-
         let [display_area, player_area] = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Fill(1), Constraint::Max(8)])
+            .constraints([Constraint::Fill(1), Constraint::Max(7)])
             .areas(area);
 
         let queue_width = ((display_area.width as f32 * 0.2f32) as u16).clamp(30, 100);
@@ -185,5 +173,41 @@ impl StatefulWidget for &mut MainWidget {
         self.render_queue_area(queue_area, buf, state);
         self.render_player_area(player_area, buf, state);
         self.render_volume_slider(area, buf, state);
+    }
+}
+
+fn display_border_title(state: &AppState, border: border::Set<'static>) -> Line<'static> {
+    let spans = vec![
+        Span::styled(" d", border_title_first_style(Clmp3Widget::Display, state)),
+        Span::styled("isplay ", border_title_style(Clmp3Widget::Display, state)),
+        Span::raw(border.horizontal_top),
+        Span::styled(" l", border_title_first_style(Clmp3Widget::Load, state)),
+        Span::styled("oad ", border_title_style(Clmp3Widget::Load, state)),
+    ];
+    Line::from(spans)
+}
+
+fn display_border_bottom_title(
+    state: &AppState,
+    border: border::Set<'static>,
+) -> Option<Line<'static>> {
+    match state.last_display_widget() {
+        Clmp3Widget::Display => None,
+        Clmp3Widget::Load => {
+            let style = border_button_style(Clmp3Widget::Load, state);
+            Some(Line::from(vec![
+                Span::styled(" ← up ", style),
+                Span::raw(border.horizontal_top),
+                Span::raw(border.horizontal_top),
+                Span::styled(" ↑ select ↓ ", style),
+                Span::raw(border.horizontal_top),
+                Span::raw(border.horizontal_top),
+                Span::styled(" load → ", style),
+                Span::raw(border.horizontal_top),
+                Span::raw(border.horizontal_top),
+                Span::styled(" load dir → + shift ", style),
+            ]))
+        }
+        _ => None,
     }
 }

@@ -2,14 +2,23 @@ use std::cmp::Ordering;
 
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
-    style::Style,
-    widgets::{List, ListItem, ListState, StatefulWidget},
+    style::{Color, Style},
+    text::{Line, Span},
+    widgets::{Block, List, ListItem, ListState, StatefulWidget},
 };
 
 use crate::{
-    app_state::AppState, enums::Clmp3Widget, metadata::Metadata, source_builder::SourceType,
-    widgets::traits::InputWidget,
+    app_state::AppState,
+    enums::{Clmp3Widget, WidgetArea},
+    metadata::Metadata,
+    source_builder::SourceType,
+    widgets::{
+        render_helper::{border_title_first_style, border_title_style, thickness},
+        traits::InputWidget,
+    },
 };
+
+const PAGE_STEP: usize = 5;
 
 pub struct QueueWidget {
     queue_state: ListState,
@@ -65,7 +74,7 @@ impl StatefulWidget for &mut QueueWidget {
 
                 let style = match i.cmp(&prev_len) {
                     Ordering::Less => Style::default().dark_gray(),
-                    Ordering::Equal => Style::default().blue(),
+                    Ordering::Equal => Style::default().light_blue(),
                     Ordering::Greater => Style::default().white(),
                 };
 
@@ -73,10 +82,15 @@ impl StatefulWidget for &mut QueueWidget {
             })
             .collect();
 
+        let (thickness, style) = thickness(WidgetArea::Queue, state);
+        let queue_block = Block::bordered()
+            .title(border_title(state, items.len(), prev_len))
+            .border_set(thickness)
+            .border_style(style);
+
         let list = List::new(items)
-            .highlight_style(Style::new().reversed())
-            .highlight_symbol(">>")
-            .repeat_highlight_symbol(true);
+            .highlight_style(Style::default().fg(Color::White).bg(Color::DarkGray))
+            .block(queue_block);
 
         self.update_queue_state(state);
         list.render(area, buf, &mut self.queue_state);
@@ -93,10 +107,25 @@ fn label(source: &SourceType, metadata: Option<&Metadata>) -> String {
     }
 }
 
+fn border_title(state: &AppState, item_count: usize, prev_len: usize) -> Line<'static> {
+    let mut spans = vec![
+        Span::styled(" q", border_title_first_style(Clmp3Widget::Queue, state)),
+        Span::styled("ueue ", border_title_style(Clmp3Widget::Queue, state)),
+    ];
+
+    if item_count > 0 {
+        spans.push(Span::raw(format!(
+            "{}/{}",
+            (prev_len + 1).clamp(1, item_count),
+            item_count
+        )));
+    }
+
+    Line::from(spans)
+}
+
 impl InputWidget for QueueWidget {
     fn on_input(&mut self, _modifier: KeyModifiers, key: KeyCode, state: &mut AppState) {
-        let page_step: usize = 5;
-
         match key {
             KeyCode::Down => self.select(state, ListState::select_next),
             KeyCode::Up => self.select(state, ListState::select_previous),
@@ -104,10 +133,10 @@ impl InputWidget for QueueWidget {
             KeyCode::Home => self.select(state, ListState::select_first),
             KeyCode::End => self.select(state, ListState::select_last),
             KeyCode::PageUp => {
-                self.select(state, |s| Self::move_by(s, |i| i.saturating_sub(page_step)))
+                self.select(state, |s| Self::move_by(s, |i| i.saturating_sub(PAGE_STEP)))
             }
             KeyCode::PageDown => {
-                self.select(state, |s| Self::move_by(s, |i| i.saturating_add(page_step)))
+                self.select(state, |s| Self::move_by(s, |i| i.saturating_add(PAGE_STEP)))
             }
             _ => {}
         }

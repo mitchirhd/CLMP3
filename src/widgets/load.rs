@@ -1,7 +1,10 @@
 use std::{fs, path::Path, sync::Arc, thread};
 
 use crossterm::event::{KeyCode, KeyModifiers};
-use ratatui::widgets::{Widget, WidgetRef};
+use ratatui::{
+    style::{Color, Style},
+    widgets::{Block, Borders, Widget, WidgetRef},
+};
 use ratatui_explorer::{FileExplorer, FileExplorerBuilder, Input, Theme};
 
 use crate::{
@@ -19,9 +22,13 @@ pub struct LoadWidget {
 
 impl LoadWidget {
     pub fn new() -> LoadWidget {
-        let mut file_explorer =
-            FileExplorerBuilder::build_with_theme(Theme::default().add_default_title())
-                .expect("Could not create file explorer");
+        let mut file_explorer = FileExplorerBuilder::build_with_theme(
+            Theme::default()
+                .with_dir_style(Style::default().fg(Color::LightBlue))
+                .with_highlight_dir_style(Style::default().fg(Color::White).bg(Color::DarkGray))
+                .with_block(Block::default().borders(Borders::NONE)),
+        )
+        .expect("Could not create file explorer");
 
         file_explorer
             .set_filter_map(|file| {
