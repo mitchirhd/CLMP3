@@ -86,13 +86,16 @@ impl AudioPlayer {
     }
 
     pub fn previous(&mut self) {
-        if self.stopped {
-            return;
-        }
-        if self.player.get_pos() <= RESTART_THRESHOLD {
+        let should_go_previous = if self.stopped {
+            self.queue.prev_len() > 0
+        } else {
+            self.player.get_pos() <= RESTART_THRESHOLD || self.queue.peek().is_none()
+        };
+
+        if should_go_previous {
             self.queue.previous_to_current();
             self.play_front_or_stop();
-        } else {
+        } else if !self.stopped {
             self.player.try_seek(Duration::ZERO).unwrap();
         }
     }
