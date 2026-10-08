@@ -2,7 +2,9 @@ use std::{fs, path::Path, sync::Arc, thread};
 
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
+    layout::{Constraint, Direction, Layout},
     style::{Color, Style},
+    text::Line,
     widgets::{Block, Borders, Widget, WidgetRef},
 };
 use ratatui_explorer::{FileExplorer, FileExplorerBuilder, Input, Theme};
@@ -113,7 +115,12 @@ impl Widget for &LoadWidget {
     where
         Self: Sized,
     {
-        self.file_explorer.widget().render_ref(area, buf);
+        let [cwd_area, explorer_area] = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(1), Constraint::Fill(1)])
+            .areas(area);
+        Line::from(self.file_explorer.cwd().to_string_lossy().into_owned()).render(cwd_area, buf);
+        self.file_explorer.widget().render_ref(explorer_area, buf);
     }
 }
 

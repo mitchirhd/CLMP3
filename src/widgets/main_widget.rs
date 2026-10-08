@@ -1,18 +1,10 @@
 use std::io;
 
 use crate::{
-    app_state::AppState,
-    enums::{Clmp3Widget, WidgetArea},
-    widgets::{
-        display::DisplayWidget,
-        load::LoadWidget,
-        player::PlayerWidget,
-        queue::QueueWidget,
-        render_helper::{
-            border_button_style, border_title_first_style, border_title_style, messages_widget,
-            thickness,
-        },
-        traits::InputWidget,
+    app_state::AppState, enums::{Clmp3Widget, WidgetArea}, widgets::{
+        display::DisplayWidget, load::LoadWidget, player::PlayerWidget, queue::QueueWidget, render_helper::{
+            border_button_style, border_text_style, border_title_first_style, border_title_style, messages_widget, thickness,
+        }, traits::InputWidget,
     },
 };
 
@@ -194,18 +186,24 @@ fn display_border_bottom_title(
     match state.last_display_widget() {
         Clmp3Widget::Display => None,
         Clmp3Widget::Load => {
-            let style = border_button_style(Clmp3Widget::Load, state);
+            let button_style = border_button_style(Clmp3Widget::Load, state);
+            let text_style = border_text_style(Clmp3Widget::Load, state);
             Some(Line::from(vec![
-                Span::styled(" ← up ", style),
+                Span::styled(" up ", text_style),
+                Span::styled("🢀 ", button_style),
                 Span::raw(border.horizontal_top),
                 Span::raw(border.horizontal_top),
-                Span::styled(" ↑ select ↓ ", style),
+                Span::styled(" 🢁 ", button_style),
+                Span::styled("select ", text_style),
+                Span::styled("🢃 ", button_style),
                 Span::raw(border.horizontal_top),
                 Span::raw(border.horizontal_top),
-                Span::styled(" load → ", style),
+                Span::styled(" load ", text_style),
+                Span::styled("🢂 ", button_style),
                 Span::raw(border.horizontal_top),
                 Span::raw(border.horizontal_top),
-                Span::styled(" load dir → + shift ", style),
+                Span::styled(" load dir ", text_style),
+                Span::styled("🢂 + shift ", button_style),
             ]))
         }
         _ => None,

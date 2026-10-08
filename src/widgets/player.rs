@@ -19,7 +19,8 @@ use crate::{
     metadata::Metadata,
     widgets::{
         render_helper::{
-            border_button_style, border_title_first_style, border_title_style, thickness,
+            border_button_style, border_text_style, border_title_first_style, border_title_style,
+            thickness,
         },
         traits::InputWidget,
     },
@@ -73,12 +74,12 @@ impl StatefulWidget for &PlayerWidget {
 
         let [progress_area, rest_area] = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Max(2), Constraint::Length(3)])
+            .constraints([Constraint::Length(2), Constraint::Length(3)])
             .areas(player_block.inner(area));
 
         let [title_area, volume_area] = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Fill(1), Constraint::Fill(1)])
+            .constraints([Constraint::Fill(2), Constraint::Fill(1)])
             .areas(rest_area);
 
         render_song_infos(title_area, buf, state.current_metadata());
@@ -107,23 +108,30 @@ fn border_title_bottom(
     };
 
     let button_style = border_button_style(Clmp3Widget::Player, state);
+    let text_style = border_text_style(Clmp3Widget::Player, state);
 
     let left_spans = vec![
-        Span::styled(" ⏮ left arrow ", button_style),
+        Span::styled(" ⏮ ", text_style),
+        Span::styled("🢀 ", button_style),
         Span::raw(border.horizontal_top),
         Span::raw(border.horizontal_top),
-        Span::styled(
-            format!(" {play_pause_symbol}  space "),
-            Style::default().light_blue(),
-        ),
+        Span::styled(format!(" {play_pause_symbol} "), Style::default().white()),
+        Span::styled(format!("space "), Style::default().light_blue()),
         Span::raw(border.horizontal_top),
         Span::raw(border.horizontal_top),
-        Span::styled(" ⏭ right arrow ", button_style),
+        Span::styled(" ⏭ ", text_style),
+        Span::styled("🢂 ", button_style),
+    ];
+
+    let right_spans = vec![
+        Span::styled(" 🢁 ", button_style),
+        Span::styled("vol ", text_style),
+        Span::styled("🢃 ", button_style),
     ];
 
     (
         Line::from(left_spans).left_aligned(),
-        Line::styled(" ↑ vol ↓ ", button_style).right_aligned(),
+        Line::from(right_spans).right_aligned(),
     )
 }
 

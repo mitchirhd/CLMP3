@@ -43,6 +43,14 @@ pub fn border_button_style(check: Clmp3Widget, state: &AppState) -> Style {
     }
 }
 
+pub fn border_text_style(check: Clmp3Widget, state: &AppState) -> Style {
+    if state.selected_widget() == check {
+        Style::default().white()
+    } else {
+        Style::default().dark_gray()
+    }
+}
+
 pub struct MessageWidget {
     lines: Vec<String>,
 }
