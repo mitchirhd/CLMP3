@@ -3,6 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use anyhow::Ok;
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
     buffer::Buffer,
@@ -116,7 +117,7 @@ fn border_title_bottom(
         Span::raw(border.horizontal_top),
         Span::raw(border.horizontal_top),
         Span::styled(format!(" {play_pause_symbol} "), Style::default().white()),
-        Span::styled(format!("space "), Style::default().light_blue()),
+        Span::styled("space ", Style::default().light_blue()),
         Span::raw(border.horizontal_top),
         Span::raw(border.horizontal_top),
         Span::styled(" ⏭ ", text_style),
@@ -193,13 +194,19 @@ fn calculate_time_str(duration: &Duration) -> String {
 }
 
 impl InputWidget for PlayerWidget {
-    fn on_input(&mut self, _modifier: KeyModifiers, key: KeyCode, state: &mut AppState) {
+    fn on_input(
+        &mut self,
+        _modifier: KeyModifiers,
+        key: KeyCode,
+        state: &mut AppState,
+    ) -> anyhow::Result<()> {
         match key {
             KeyCode::Up => self.change_volume(state, |vol, step| vol + step),
             KeyCode::Down => self.change_volume(state, |vol, step| vol - step),
             KeyCode::Right => state.player.skip(),
-            KeyCode::Left => state.player.previous(),
+            KeyCode::Left => state.player.previous()?,
             _ => {}
-        }
+        };
+        Ok(())
     }
 }

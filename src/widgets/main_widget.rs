@@ -1,10 +1,18 @@
 use std::io;
 
 use crate::{
-    app_state::AppState, enums::{Clmp3Widget, WidgetArea}, widgets::{
-        display::DisplayWidget, load::LoadWidget, player::PlayerWidget, queue::QueueWidget, render_helper::{
-            border_button_style, border_text_style, border_title_first_style, border_title_style, messages_widget, thickness,
-        }, traits::InputWidget,
+    app_state::AppState,
+    enums::{Clmp3Error, Clmp3Widget, WidgetArea},
+    widgets::{
+        display::DisplayWidget,
+        load::LoadWidget,
+        player::PlayerWidget,
+        queue::QueueWidget,
+        render_helper::{
+            border_button_style, border_text_style, border_title_first_style, border_title_style,
+            messages_widget, thickness,
+        },
+        traits::InputWidget,
     },
 };
 
@@ -18,9 +26,6 @@ use ratatui::{
     widgets::{Block, StatefulWidget, Widget},
 };
 use tui_slider::{Slider, SliderOrientation};
-
-const MIN_TERMINAL_HEIGHT: u16 = 20;
-const MIN_TERMINAL_WIDTH: u16 = 80;
 
 pub struct MainWidget {
     player_widget: PlayerWidget,
@@ -46,24 +51,21 @@ impl MainWidget {
             Clmp3Widget::Load => Some(&mut self.load_widget),
             Clmp3Widget::Queue => Some(&mut self.queue_widget),
         };
-        if let Some(input_widget) = input_widget {
-            input_widget.on_input(modifier, key, state);
-        }
+        if let Some(input_widget) = input_widget
+            && let Err(e) = input_widget.on_input(modifier, key, state)
+        {
+            state.last_error = Some((Clmp3Error::InputError, vec![format!("{e:#}")]));
+        };
     }
 
     pub fn draw(&mut self, terminal: &mut DefaultTerminal, state: &mut AppState) -> io::Result<()> {
-        if terminal.size().unwrap().width < MIN_TERMINAL_WIDTH
-            || terminal.size().unwrap().height < MIN_TERMINAL_HEIGHT
-        {
-            let msg = messages_widget(&[
-                String::from("Terminal too small"),
-                format!("Minimal width: {MIN_TERMINAL_WIDTH} lines"),
-                format!("Minimal height: {MIN_TERMINAL_HEIGHT} lines"),
-            ]);
-            terminal.draw(|frame| frame.render_widget(&msg, frame.area()))?;
-        } else {
-            terminal.draw(|frame| frame.render_stateful_widget(&mut *self, frame.area(), state))?;
-        }
+        match &state.last_error {
+            Some((_, msg)) => {
+                terminal.draw(|frame| frame.render_widget(&messages_widget(msg), frame.area()))?
+            }
+            None => terminal
+                .draw(|frame| frame.render_stateful_widget(&mut *self, frame.area(), state))?,
+        };
         Ok(())
     }
 

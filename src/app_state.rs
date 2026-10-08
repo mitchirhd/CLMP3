@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     audio::AudioPlayer,
-    enums::{Clmp3Widget, WidgetArea},
+    enums::{Clmp3Error, Clmp3Widget, WidgetArea},
     metadata::{Metadata, MetadataLoader},
     source_builder::{SourceId, SourceType},
 };
@@ -18,6 +18,7 @@ pub struct AppState {
     volume_changed_time: Option<Instant>,
     pub metadata_loader: Arc<MetadataLoader>,
     pub metadata_map: Arc<RwLock<HashMap<SourceId, Arc<Metadata>>>>,
+    pub last_error: Option<(Clmp3Error, Vec<String>)>,
 }
 
 impl AppState {
@@ -30,6 +31,7 @@ impl AppState {
             volume_changed_time: None,
             metadata_loader: Arc::new(MetadataLoader::new(metadata_map.clone())),
             metadata_map,
+            last_error: None,
         }
     }
 

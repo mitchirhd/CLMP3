@@ -1,6 +1,6 @@
 use std::{
     collections::VecDeque,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, Mutex, MutexGuard, RwLock},
 };
 
 use rand::{rng, seq::SliceRandom};
@@ -99,7 +99,7 @@ impl SourceQueue {
         }
     }
 
-    fn clear(&self){
+    fn clear(&self) {
         let mut contents = self.contents.write().expect("queue lock poisoned");
         contents.previous.clear();
         contents.upcoming.clear();
@@ -118,39 +118,45 @@ impl SharedQueue {
         }
     }
 
+    fn lock(&self) -> MutexGuard<'_, SourceQueue> {
+        self.inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
     pub fn is_empty(&self) -> bool {
-        self.inner.lock().unwrap().is_empty()
+        self.lock().is_empty()
     }
 
     pub fn previous_to_current(&self) {
-        self.inner.lock().unwrap().previous_to_current();
+        self.lock().previous_to_current();
     }
 
     pub fn current_to_previous(&self) {
-        self.inner.lock().unwrap().current_to_previous();
+        self.lock().current_to_previous();
     }
 
     pub fn peek(&self) -> Option<SourceType> {
-        self.inner.lock().unwrap().peek()
+        self.lock().peek()
     }
 
     pub fn prev_len(&self) -> usize {
-        self.inner.lock().unwrap().prev_len()
+        self.lock().prev_len()
     }
 
     pub fn snapshot(&self) -> (usize, Vec<SourceType>) {
-        self.inner.lock().unwrap().snapshot()
+        self.lock().snapshot()
     }
 
     pub fn enqueue(&self, item: SourceType) {
-        self.inner.lock().unwrap().enqueue(item);
+        self.lock().enqueue(item);
     }
 
     pub fn shuffle(&self) {
-        self.inner.lock().unwrap().shuffle();
+        self.lock().shuffle();
     }
 
-    pub fn clear(&self){
-        self.inner.lock().unwrap().clear();
+    pub fn clear(&self) {
+        self.lock().clear();
     }
 }

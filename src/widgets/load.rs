@@ -125,7 +125,12 @@ impl Widget for &LoadWidget {
 }
 
 impl InputWidget for LoadWidget {
-    fn on_input(&mut self, modifier: KeyModifiers, key: KeyCode, state: &mut AppState) {
+    fn on_input(
+        &mut self,
+        modifier: KeyModifiers,
+        key: KeyCode,
+        state: &mut AppState,
+    ) -> anyhow::Result<()> {
         let input = match key {
             KeyCode::Left | KeyCode::Backspace => Input::Left,
             KeyCode::Right | KeyCode::Enter => self.open_current(modifier, state),
@@ -138,8 +143,7 @@ impl InputWidget for LoadWidget {
             _ => Input::None,
         };
 
-        if let Err(_err) = self.file_explorer.handle(input) {
-            // state.set_error(format!("Directory cannot be listed: {err}")); TODO
-        }
+        self.file_explorer.handle(input)?;
+        Ok(())
     }
 }

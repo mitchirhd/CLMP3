@@ -5,6 +5,7 @@ use std::{
     time::Duration,
 };
 
+use anyhow::Context;
 use rodio::{Decoder, Source, source::SineWave};
 
 #[derive(Clone)]
@@ -14,22 +15,22 @@ pub enum SourceType {
 }
 
 impl SourceType {
-    pub fn build(&self) -> Box<dyn Source<Item = f32> + Send> {
+    pub fn build(&self) -> anyhow::Result<Box<dyn Source<Item = f32> + Send>> {
         match self {
             SourceType::SineWave(freq, duration) => {
-                Box::new(SineWave::new(*freq).take_duration(*duration))
+                Ok(Box::new(SineWave::new(*freq).take_duration(*duration)))
             }
             SourceType::File(path) => {
-                let bytes = fs::read(path).expect("Could not open file");
+                let bytes = fs::read(path)
+                    .context("Could not open file, was it moved after adding to queue?")?;
                 let len = bytes.len() as u64;
-                Box::new(
-                    Decoder::builder()
-                        .with_data(Cursor::new(bytes))
-                        .with_byte_len(len)
-                        .with_seekable(true)
-                        .build()
-                        .expect("Could not decode audio"),
-                )
+                let built = Decoder::builder()
+                    .with_data(Cursor::new(bytes))
+                    .with_byte_len(len)
+                    .with_seekable(true)
+                    .build()
+                    .context("Could not decode audio")?;
+                Ok(Box::new(built))
             }
         }
     }

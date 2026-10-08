@@ -204,6 +204,7 @@ dependencies = [
 name = "clmp3"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "crossterm",
  "lofty",
  "rand 0.10.3",

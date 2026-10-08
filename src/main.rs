@@ -1,4 +1,3 @@
-use std::io;
 mod app;
 mod enums;
 mod widgets;
@@ -9,10 +8,10 @@ mod metadata;
 mod source_builder;
 mod source_queue;
 
-fn main() -> io::Result<()> {
+fn main() -> anyhow::Result<()> {
     let mut terminal = ratatui::init();
 
-    let mut app = App::new();
+    let mut app = App::new()?;
 
     let app_result = app.start(&mut terminal);
 

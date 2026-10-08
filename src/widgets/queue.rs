@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 
+use anyhow::Ok;
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
     style::{Color, Style},
@@ -146,7 +147,12 @@ fn border_title_bottom(state: &AppState, border: border::Set<'static>) -> Line<'
 }
 
 impl InputWidget for QueueWidget {
-    fn on_input(&mut self, _modifier: KeyModifiers, key: KeyCode, state: &mut AppState) {
+    fn on_input(
+        &mut self,
+        _modifier: KeyModifiers,
+        key: KeyCode,
+        state: &mut AppState,
+    ) -> anyhow::Result<()> {
         match key {
             KeyCode::Down => self.select(state, ListState::select_next),
             KeyCode::Up => self.select(state, ListState::select_previous),
@@ -160,8 +166,9 @@ impl InputWidget for QueueWidget {
                 self.select(state, |s| Self::move_by(s, |i| i.saturating_add(PAGE_STEP)))
             }
             KeyCode::Char('s') => state.player.queue.shuffle(),
-            KeyCode::Char('c') => state.player.clear(),
+            KeyCode::Char('c') => state.player.clear()?,
             _ => {}
-        }
+        };
+        Ok(())
     }
 }

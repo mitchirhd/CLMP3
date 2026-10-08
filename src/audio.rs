@@ -1,5 +1,5 @@
 use rodio::source::Source;
-use rodio::{MixerDeviceSink, Player};
+use rodio::{DeviceSinkError, MixerDeviceSink, Player};
 use std::path::Path;
 use std::time::Duration;
 
@@ -17,21 +17,20 @@ pub struct AudioPlayer {
 }
 
 impl AudioPlayer {
-    pub fn new() -> AudioPlayer {
-        let mut handle =
-            rodio::DeviceSinkBuilder::open_default_sink().expect("open default audio stream");
+    pub fn new() -> Result<AudioPlayer, DeviceSinkError> {
+        let mut handle = rodio::DeviceSinkBuilder::open_default_sink()?;
         handle.log_on_drop(false);
 
         let player = rodio::Player::connect_new(handle.mixer());
 
-        AudioPlayer {
+        Ok(AudioPlayer {
             _sink: handle,
             player,
             queue: SharedQueue::new(),
             total_duration: None,
             stopped: true,
             volume: 100.0,
-        }
+        })
     }
 
     pub fn can_play(path: &Path) -> bool {
@@ -46,14 +45,15 @@ impl AudioPlayer {
         !self.queue.is_empty()
     }
 
-    pub fn start_stop(&mut self) {
+    pub fn start_stop(&mut self) -> anyhow::Result<()> {
         if self.stopped() && self.has_next() {
-            self.play_front_or_stop();
+            return self.play_front_or_stop();
         } else if self.player.is_paused() {
             self.player.play();
         } else {
             self.player.pause();
-        }
+        };
+        Ok(())
     }
 
     pub fn paused(&self) -> bool {
@@ -81,11 +81,7 @@ impl AudioPlayer {
         }
     }
 
-    pub fn set_position(&self, pos: Duration) {
-        self.player.try_seek(pos).unwrap();
-    }
-
-    pub fn previous(&mut self) {
+    pub fn previous(&mut self) -> anyhow::Result<()> {
         let should_go_previous = if self.stopped {
             self.queue.prev_len() > 0
         } else {
@@ -94,40 +90,43 @@ impl AudioPlayer {
 
         if should_go_previous {
             self.queue.previous_to_current();
-            self.play_front_or_stop();
+            return self.play_front_or_stop();
         } else if !self.stopped {
-            self.player.try_seek(Duration::ZERO).unwrap();
-        }
+            self.player.try_seek(Duration::ZERO)?;
+        };
+        Ok(())
     }
 
     pub fn skip(&mut self) {
         self.player.skip_one();
     }
 
-    pub fn clear(&mut self) {
+    pub fn clear(&mut self) -> anyhow::Result<()> {
         self.queue.clear();
-        self.play_front_or_stop();
+        self.play_front_or_stop()
     }
 
-    pub fn update(&mut self) {
+    pub fn update(&mut self) -> anyhow::Result<()> {
         if !self.stopped && self.player.empty() {
             self.queue.current_to_previous();
-            self.play_front_or_stop();
-        }
+            return self.play_front_or_stop();
+        };
+        anyhow::Result::Ok(())
     }
 
-    fn play_front_or_stop(&mut self) {
+    fn play_front_or_stop(&mut self) -> anyhow::Result<()> {
         self.player.stop();
 
         if let Some(source) = self.queue.peek() {
-            let source_data = source.build();
+            let source_data = source.build()?;
             self.total_duration = source_data.total_duration();
             self.player.append(source_data);
             self.stopped = false;
-            return;
+            return Ok(());
         }
 
         self.total_duration = None;
         self.stopped = true;
+        Ok(())
     }
 }

@@ -81,6 +81,6 @@ impl Widget for &MessageWidget {
 
 pub fn messages_widget(messages: &[String]) -> MessageWidget {
     MessageWidget {
-        lines: Vec::from(messages),
+        lines: messages.to_owned(),
     }
 }

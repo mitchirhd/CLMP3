@@ -31,3 +31,10 @@ pub enum WidgetArea {
     Display,
     Queue,
 }
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Clmp3Error {
+    TerminalSize,
+    AudioError,
+    InputError,
+}
