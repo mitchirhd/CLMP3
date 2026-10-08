@@ -98,6 +98,12 @@ impl SourceQueue {
                 .shuffle(&mut rng());
         }
     }
+
+    fn clear(&self){
+        let mut contents = self.contents.write().expect("queue lock poisoned");
+        contents.previous.clear();
+        contents.upcoming.clear();
+    }
 }
 
 #[derive(Clone)]
@@ -142,5 +148,9 @@ impl SharedQueue {
 
     pub fn shuffle(&self) {
         self.inner.lock().unwrap().shuffle();
+    }
+
+    pub fn clear(&self){
+        self.inner.lock().unwrap().clear();
     }
 }

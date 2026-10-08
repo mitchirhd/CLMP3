@@ -94,11 +94,6 @@ impl App {
             App::start_stop,
         );
 
-        map.insert(
-            (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Char('s')),
-            |app| app.app_state.player.queue.shuffle(),
-        );
-
         map
     }
 

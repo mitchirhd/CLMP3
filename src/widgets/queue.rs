@@ -3,6 +3,7 @@ use std::cmp::Ordering;
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
     style::{Color, Style},
+    symbols::border,
     text::{Line, Span},
     widgets::{Block, List, ListItem, ListState, StatefulWidget},
 };
@@ -13,7 +14,10 @@ use crate::{
     metadata::Metadata,
     source_builder::SourceType,
     widgets::{
-        render_helper::{border_title_first_style, border_title_style, thickness},
+        render_helper::{
+            border_button_style, border_text_style, border_title_first_style, border_title_style,
+            thickness,
+        },
         traits::InputWidget,
     },
 };
@@ -85,6 +89,7 @@ impl StatefulWidget for &mut QueueWidget {
         let (thickness, style) = thickness(WidgetArea::Queue, state);
         let queue_block = Block::bordered()
             .title(border_title(state, items.len(), prev_len))
+            .title_bottom(border_title_bottom(state, thickness))
             .border_set(thickness)
             .border_style(style);
 
@@ -124,6 +129,22 @@ fn border_title(state: &AppState, item_count: usize, prev_len: usize) -> Line<'s
     Line::from(spans)
 }
 
+fn border_title_bottom(state: &AppState, border: border::Set<'static>) -> Line<'static> {
+    let button_style = border_button_style(Clmp3Widget::Queue, state);
+    let text_style = border_text_style(Clmp3Widget::Queue, state);
+
+    let spans = vec![
+        Span::styled(" shuffle ", text_style),
+        Span::styled("s ", button_style),
+        Span::raw(border.horizontal_top),
+        Span::raw(border.horizontal_top),
+        Span::styled(" clear ", text_style),
+        Span::styled("c ", button_style),
+    ];
+
+    Line::from(spans)
+}
+
 impl InputWidget for QueueWidget {
     fn on_input(&mut self, _modifier: KeyModifiers, key: KeyCode, state: &mut AppState) {
         match key {
@@ -138,6 +159,8 @@ impl InputWidget for QueueWidget {
             KeyCode::PageDown => {
                 self.select(state, |s| Self::move_by(s, |i| i.saturating_add(PAGE_STEP)))
             }
+            KeyCode::Char('s') => state.player.queue.shuffle(),
+            KeyCode::Char('c') => state.player.clear(),
             _ => {}
         }
     }

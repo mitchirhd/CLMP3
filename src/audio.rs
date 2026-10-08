@@ -104,6 +104,11 @@ impl AudioPlayer {
         self.player.skip_one();
     }
 
+    pub fn clear(&mut self) {
+        self.queue.clear();
+        self.play_front_or_stop();
+    }
+
     pub fn update(&mut self) {
         if !self.stopped && self.player.empty() {
             self.queue.current_to_previous();
