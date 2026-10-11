@@ -1,7 +1,20 @@
 [package]
 name = "clmp3"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
+description = "Audioplayer that runs in a terminal"
+license = "MIT OR Apache-2.0"
+repository = "https://git.spasten.net/mitchi/CLMP3"
+readme = "README.md"
+keywords = ["music", "player", "tui"]
+categories = ["command-line-utilities", "multimedia::audio"]
+
+[profile.release]
+lto = true
+strip = true
+codegen-units = 1
+panic = "abort"
+opt-level = 3
 
 [dependencies]
 anyhow = "1.0.104"
