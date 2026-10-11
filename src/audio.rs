@@ -1,14 +1,17 @@
 use rodio::source::Source;
 use rodio::{DeviceSinkError, MixerDeviceSink, Player};
 use std::path::Path;
+use std::sync::mpsc::Sender;
 use std::time::Duration;
 
+use crate::enums::Clmp3Event;
 use crate::source_queue::SharedQueue;
 
 const RESTART_THRESHOLD: Duration = Duration::from_secs(1);
 
 pub struct AudioPlayer {
     _sink: MixerDeviceSink,
+    sender: Sender<Clmp3Event>,
     player: Player,
     pub queue: SharedQueue,
     pub total_duration: Option<Duration>,
@@ -17,7 +20,7 @@ pub struct AudioPlayer {
 }
 
 impl AudioPlayer {
-    pub fn new() -> Result<AudioPlayer, DeviceSinkError> {
+    pub fn new(sender: Sender<Clmp3Event>) -> Result<AudioPlayer, DeviceSinkError> {
         let mut handle = rodio::DeviceSinkBuilder::open_default_sink()?;
         handle.log_on_drop(false);
 
@@ -25,6 +28,7 @@ impl AudioPlayer {
 
         Ok(AudioPlayer {
             _sink: handle,
+            sender,
             player,
             queue: SharedQueue::new(),
             total_duration: None,
@@ -122,11 +126,11 @@ impl AudioPlayer {
             self.total_duration = source_data.total_duration();
             self.player.append(source_data);
             self.stopped = false;
-            return Ok(());
+        } else {
+            self.total_duration = None;
+            self.stopped = true;
         }
-
-        self.total_duration = None;
-        self.stopped = true;
+        let _ = self.sender.send(Clmp3Event::NewSong);
         Ok(())
     }
 }

@@ -8,7 +8,6 @@ use std::{
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::DefaultTerminal;
-use rodio::DeviceSinkError;
 
 use crate::{
     app_state::AppState,
@@ -51,15 +50,16 @@ pub struct App {
 }
 
 impl App {
-    pub fn new() -> Result<App, DeviceSinkError> {
+    pub fn new() -> anyhow::Result<App> {
         let (event_tx, event_rx) = mpsc::channel::<Clmp3Event>();
-        let app_state = AppState::new(AudioPlayer::new()?);
+        let player = AudioPlayer::new(event_tx.clone())?;
+        let app_state = AppState::new(event_tx.clone(), player);
 
         Ok(App {
             exit: false,
             event_tx,
             event_rx,
-            main_widget: MainWidget::new(),
+            main_widget: MainWidget::new()?,
             app_state,
             handler_map: App::handler_map(),
         })
@@ -132,6 +132,12 @@ impl App {
                 }
                 // Clmp3Event::MouseInput(mouse_event) => todo!(),
                 Clmp3Event::Redraw => self.app_state.player.update(),
+                Clmp3Event::NewSong => {
+                    self.main_widget
+                        .display_widget
+                        .update_state(&self.app_state.current_metadata());
+                    anyhow::Ok(())
+                }
             };
 
             if let Err(e) = result {

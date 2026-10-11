@@ -51,5 +51,6 @@ pub fn file_name(path: &Path) -> String {
 
 #[derive(Hash, PartialEq, Eq, Clone, Debug)]
 pub enum SourceId {
+    None,
     File(PathBuf),
 }

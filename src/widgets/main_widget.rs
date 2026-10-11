@@ -23,25 +23,25 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Margin, Rect},
     symbols::border,
     text::{Line, Span},
-    widgets::{Block, StatefulWidget, Widget},
+    widgets::{Block, Clear, StatefulWidget, Widget},
 };
 use tui_slider::{Slider, SliderOrientation};
 
 pub struct MainWidget {
     player_widget: PlayerWidget,
-    display_widget: DisplayWidget,
+    pub display_widget: DisplayWidget,
     queue_widget: QueueWidget,
     load_widget: LoadWidget,
 }
 
 impl MainWidget {
-    pub fn new() -> MainWidget {
-        MainWidget {
+    pub fn new() -> anyhow::Result<MainWidget> {
+        Ok(MainWidget {
             player_widget: PlayerWidget::new(),
-            display_widget: DisplayWidget::new(),
+            display_widget: DisplayWidget::new()?,
             queue_widget: QueueWidget::new(),
             load_widget: LoadWidget::new(),
-        }
+        })
     }
 
     pub fn widget_controls(&mut self, modifier: KeyModifiers, key: KeyCode, state: &mut AppState) {
@@ -70,7 +70,7 @@ impl MainWidget {
     }
 
     fn render_display_area(
-        &self,
+        &mut self,
         display_area: Rect,
         buf: &mut ratatui::prelude::Buffer,
         state: &mut AppState,
@@ -112,31 +112,34 @@ impl MainWidget {
     }
 
     fn render_volume_slider(&self, area: Rect, buf: &mut Buffer, state: &mut AppState) {
-        if state.draw_volume_slider() {
-            let vol_block = Block::bordered()
-                .title(Line::from("Vol"))
-                .border_set(border::PLAIN);
-
-            let vol_slider = Slider::new(state.player.volume() as f64, 0.0, 100.0)
-                .orientation(SliderOrientation::Vertical)
-                .filled_symbol("█")
-                .empty_symbol("░")
-                .handle_symbol("█")
-                .block(vol_block);
-
-            let [_, vol_area, _] = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([Constraint::Fill(1), Constraint::Max(5), Constraint::Fill(1)])
-                .areas(area);
-
-            vol_slider.render(
-                vol_area.inner(Margin {
-                    horizontal: 0,
-                    vertical: 3,
-                }),
-                buf,
-            );
+        if !state.draw_volume_slider() {
+            return;
         }
+
+        let vol_block = Block::bordered()
+            .title(Line::from("Vol"))
+            .border_set(border::PLAIN);
+
+        let vol_slider = Slider::new(state.player.volume() as f64, 0.0, 100.0)
+            .orientation(SliderOrientation::Vertical)
+            .filled_symbol("█")
+            .empty_symbol("░")
+            .handle_symbol("█")
+            .block(vol_block);
+
+        let [_, vol_area, _] = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Fill(1), Constraint::Max(5), Constraint::Fill(1)])
+            .areas(area);
+
+        let vol_area = vol_area.inner(Margin {
+            horizontal: 0,
+            vertical: 3,
+        });
+        
+        Clear.render(vol_area, buf);
+
+        vol_slider.render(vol_area, buf);
     }
 }
 
@@ -163,10 +166,15 @@ impl StatefulWidget for &mut MainWidget {
             .constraints([Constraint::Percentage(100), Constraint::Length(queue_width)])
             .areas(display_area);
 
+        let [_, volume_area] = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(100), Constraint::Length(queue_width)])
+            .areas(area);
+
         self.render_display_area(display_area, buf, state);
         self.render_queue_area(queue_area, buf, state);
         self.render_player_area(player_area, buf, state);
-        self.render_volume_slider(area, buf, state);
+        self.render_volume_slider(volume_area, buf, state);
     }
 }
 

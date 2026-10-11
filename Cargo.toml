@@ -6,9 +6,11 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.104"
 crossterm = "0.29.0"
+image = "0.25.10"
 lofty = "0.25.4"
 rand = "0.10.3"
 ratatui = "0.30.2"
 ratatui-explorer = "0.3.0"
+ratatui-image = { version = "11.1.0", default-features = false, features = ["image-defaults", "crossterm"] }
 rodio = "0.22.2"
 tui-slider = "0.3.4"
