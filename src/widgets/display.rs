@@ -1,12 +1,9 @@
-use std::sync::Arc;
-
+use image::DynamicImage;
 use ratatui::{
     layout::Constraint,
     widgets::{StatefulWidget, Widget},
 };
 use ratatui_image::{Resize, StatefulImage, picker::Picker, protocol::StatefulProtocol};
-
-use crate::metadata::Metadata;
 
 pub struct DisplayWidget {
     picker: Picker,
@@ -22,11 +19,8 @@ impl DisplayWidget {
         })
     }
 
-    pub fn update_state(&mut self, metadata: &Option<Arc<Metadata>>) {
-        self.image_state = metadata
-            .as_ref()
-            .and_then(|md| md.pic.as_ref())
-            .map(|img| self.picker.new_resize_protocol(img.clone()));
+    pub fn update_state(&mut self, new_image: Option<DynamicImage>) {
+        self.image_state = new_image.map(|img| self.picker.new_resize_protocol(img));
     }
 }
 

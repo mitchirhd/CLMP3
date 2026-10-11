@@ -136,7 +136,7 @@ impl MainWidget {
             horizontal: 0,
             vertical: 3,
         });
-        
+
         Clear.render(vol_area, buf);
 
         vol_slider.render(vol_area, buf);

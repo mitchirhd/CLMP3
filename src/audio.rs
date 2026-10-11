@@ -130,7 +130,7 @@ impl AudioPlayer {
             self.total_duration = None;
             self.stopped = true;
         }
-        let _ = self.sender.send(Clmp3Event::NewSong);
+        let _ = self.sender.send(Clmp3Event::NewSongStarted);
         Ok(())
     }
 }

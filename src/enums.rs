@@ -1,10 +1,14 @@
 use crossterm::event::KeyEvent;
+use image::DynamicImage;
+
+use crate::source_builder::SourceId;
 
 pub enum Clmp3Event {
     KeyInput(KeyEvent),
     // MouseInput(MouseEvent),
     Redraw,
-    NewSong,
+    NewSongStarted,
+    CoverLoaded(SourceId, Option<DynamicImage>),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]

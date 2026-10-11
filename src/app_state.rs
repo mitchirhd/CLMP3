@@ -1,9 +1,14 @@
 use std::{
-    collections::HashMap, sync::{Arc, RwLock, mpsc::Sender}, time::Instant,
+    collections::HashMap,
+    sync::{Arc, RwLock, mpsc::Sender},
+    time::Instant,
 };
 
 use crate::{
-    audio::AudioPlayer, enums::{Clmp3Error, Clmp3Event, Clmp3Widget, WidgetArea}, metadata::{Metadata, MetadataLoader}, source_builder::{SourceId, SourceType},
+    audio::AudioPlayer,
+    enums::{Clmp3Error, Clmp3Event, Clmp3Widget, WidgetArea},
+    metadata::{Metadata, MetadataLoader, MetadataMap},
+    source_builder::SourceType,
 };
 
 pub struct AppState {
@@ -12,7 +17,7 @@ pub struct AppState {
     last_display_widget: Clmp3Widget,
     volume_changed_time: Option<Instant>,
     pub metadata_loader: Arc<MetadataLoader>,
-    pub metadata_map: Arc<RwLock<HashMap<SourceId, Arc<Metadata>>>>,
+    pub metadata_map: MetadataMap,
     pub last_error: Option<(Clmp3Error, Vec<String>)>,
 }
 

@@ -7,12 +7,14 @@ use std::{
 };
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use image::DynamicImage;
 use ratatui::DefaultTerminal;
 
 use crate::{
     app_state::AppState,
     audio::AudioPlayer,
     enums::{Clmp3Error, Clmp3Event},
+    source_builder::SourceId,
 };
 use crate::{enums::Clmp3Widget, widgets::main_widget::MainWidget};
 
@@ -132,11 +134,9 @@ impl App {
                 }
                 // Clmp3Event::MouseInput(mouse_event) => todo!(),
                 Clmp3Event::Redraw => self.app_state.player.update(),
-                Clmp3Event::NewSong => {
-                    self.main_widget
-                        .display_widget
-                        .update_state(&self.app_state.current_metadata());
-                    anyhow::Ok(())
+                Clmp3Event::NewSongStarted => self.on_new_song(),
+                Clmp3Event::CoverLoaded(source_id, dynamic_image) => {
+                    self.on_cover_loaded(source_id, dynamic_image)
                 }
             };
 
@@ -204,5 +204,32 @@ impl App {
         {
             self.app_state.last_error = None;
         }
+    }
+
+    fn on_new_song(&mut self) -> Result<(), anyhow::Error> {
+        if let Some(metadata) = self.app_state.current_metadata() {
+            self.app_state
+                .metadata_loader
+                .load_pic(metadata.source_id.clone(), metadata.path.clone());
+        } else {
+            self.main_widget.display_widget.update_state(None);
+        }
+        Ok(())
+    }
+
+    fn on_cover_loaded(
+        &mut self,
+        source_id: SourceId,
+        dynamic_image: Option<DynamicImage>,
+    ) -> Result<(), anyhow::Error> {
+        if let Some(metadata) = self.app_state.current_metadata()
+            && metadata.source_id != source_id
+        {
+            return Ok(());
+        };
+
+        self.main_widget.display_widget.update_state(dynamic_image);
+
+        Ok(())
     }
 }
