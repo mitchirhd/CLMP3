@@ -2,24 +2,19 @@ use std::{
     fs::{self},
     io::Cursor,
     path::{Path, PathBuf},
-    time::Duration,
 };
 
 use anyhow::Context;
-use rodio::{Decoder, Source, source::SineWave};
+use rodio::{Decoder, Source};
 
 #[derive(Clone)]
 pub enum SourceType {
-    SineWave(f32, Duration),
     File(PathBuf),
 }
 
 impl SourceType {
     pub fn build(&self) -> anyhow::Result<Box<dyn Source<Item = f32> + Send>> {
         match self {
-            SourceType::SineWave(freq, duration) => {
-                Ok(Box::new(SineWave::new(*freq).take_duration(*duration)))
-            }
             SourceType::File(path) => {
                 let bytes = fs::read(path)
                     .context("Could not open file, was it moved after adding to queue?")?;
@@ -37,7 +32,6 @@ impl SourceType {
 
     pub fn id(&self) -> Option<SourceId> {
         match self {
-            SourceType::SineWave(_, _) => None,
             SourceType::File(path) => Some(SourceId::File(path.clone())),
         }
     }

@@ -1,6 +1,6 @@
 use std::{
     collections::VecDeque,
-    sync::{Arc, Mutex, MutexGuard, RwLock},
+    sync::{Arc, Mutex, MutexGuard},
 };
 
 use rand::{rng, seq::SliceRandom};
@@ -8,99 +8,85 @@ use rand::{rng, seq::SliceRandom};
 use crate::source_builder::SourceType;
 
 struct SourceQueueContents {
-    previous: Vec<SourceType>,
-    upcoming: VecDeque<SourceType>,
+    previous: Vec<Arc<SourceType>>,
+    upcoming: VecDeque<Arc<SourceType>>,
 }
 
 struct SourceQueue {
-    contents: RwLock<SourceQueueContents>,
+    contents: Mutex<SourceQueueContents>,
 }
 
 impl SourceQueue {
     fn new() -> SourceQueue {
         SourceQueue {
-            contents: RwLock::new(SourceQueueContents {
+            contents: Mutex::new(SourceQueueContents {
                 previous: Vec::new(),
                 upcoming: VecDeque::new(),
             }),
         }
     }
 
-    fn enqueue(&self, item: SourceType) {
+    fn lock(&self) -> MutexGuard<'_, SourceQueueContents> {
         self.contents
-            .write()
-            .expect("RwLock acquired")
-            .upcoming
-            .push_back(item);
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn enqueue(&self, item: SourceType) {
+        self.lock().upcoming.push_back(Arc::new(item));
     }
 
     fn current_to_previous(&self) {
-        let mut contents = self.contents.write().expect("queue lock poisoned");
+        let mut contents = self.lock();
 
         if let Some(item) = contents.upcoming.pop_front() {
             contents.previous.push(item);
         }
     }
 
-    fn peek(&self) -> Option<SourceType> {
-        self.contents
-            .read()
-            .expect("RwLock acquired")
-            .upcoming
-            .front()
-            .cloned()
+    fn peek(&self) -> Option<Arc<SourceType>> {
+        self.lock().upcoming.front().cloned()
     }
 
     fn is_empty(&self) -> bool {
-        self.contents
-            .read()
-            .expect("RwLock acquired")
-            .upcoming
-            .is_empty()
+        self.lock().upcoming.is_empty()
     }
 
-    fn snapshot(&self) -> (usize, Vec<SourceType>) {
-        let contents = self.contents.read().expect("queue lock poisoned");
-        let prev_len = contents.previous.len();
+    fn snapshot(&self) -> Vec<Arc<SourceType>> {
+        let contents = self.lock();
 
-        let items = contents
+        contents
             .previous
             .iter()
             .chain(contents.upcoming.iter())
             .cloned()
-            .collect();
-
-        (prev_len, items)
+            .collect()
     }
 
     fn prev_len(&self) -> usize {
-        self.contents
-            .read()
-            .expect("RwLock acquired")
-            .previous
-            .len()
+        self.lock().previous.len()
     }
 
     fn previous_to_current(&self) {
-        let mut contents = self.contents.write().expect("queue lock poisoned");
+        let mut contents = self.lock();
         if let Some(item) = contents.previous.pop() {
             contents.upcoming.push_front(item);
         }
     }
 
-    fn shuffle(&self) {
-        let upcoming = &mut self.contents.write().expect("queue lock poisoned").upcoming;
+    fn shuffle_queue(&self, shuffle_first: bool) {
+        let upcoming = &mut self.lock().upcoming;
         if upcoming.len() > 1 {
             upcoming
                 .make_contiguous()
-                .split_at_mut(1)
+                .split_at_mut(if shuffle_first { 0 } else { 1 })
                 .1
                 .shuffle(&mut rng());
         }
     }
 
     fn clear(&self) {
-        let mut contents = self.contents.write().expect("queue lock poisoned");
+        let mut contents = self.lock();
         contents.previous.clear();
         contents.upcoming.clear();
     }
@@ -108,55 +94,49 @@ impl SourceQueue {
 
 #[derive(Clone)]
 pub struct SharedQueue {
-    inner: Arc<Mutex<SourceQueue>>,
+    inner: Arc<SourceQueue>,
 }
 
 impl SharedQueue {
     pub fn new() -> SharedQueue {
         SharedQueue {
-            inner: Arc::new(Mutex::new(SourceQueue::new())),
+            inner: Arc::new(SourceQueue::new()),
         }
     }
 
-    fn lock(&self) -> MutexGuard<'_, SourceQueue> {
-        self.inner
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-    }
-
     pub fn is_empty(&self) -> bool {
-        self.lock().is_empty()
+        self.inner.is_empty()
     }
 
     pub fn previous_to_current(&self) {
-        self.lock().previous_to_current();
+        self.inner.previous_to_current();
     }
 
     pub fn current_to_previous(&self) {
-        self.lock().current_to_previous();
+        self.inner.current_to_previous();
     }
 
-    pub fn peek(&self) -> Option<SourceType> {
-        self.lock().peek()
+    pub fn peek(&self) -> Option<Arc<SourceType>> {
+        self.inner.peek()
     }
 
     pub fn prev_len(&self) -> usize {
-        self.lock().prev_len()
+        self.inner.prev_len()
     }
 
-    pub fn snapshot(&self) -> (usize, Vec<SourceType>) {
-        self.lock().snapshot()
+    pub fn snapshot(&self) -> Vec<Arc<SourceType>> {
+        self.inner.snapshot()
     }
 
     pub fn enqueue(&self, item: SourceType) {
-        self.lock().enqueue(item);
+        self.inner.enqueue(item);
     }
 
-    pub fn shuffle(&self) {
-        self.lock().shuffle();
+    pub fn shuffle_queue(&self, shuffle_first: bool) {
+        self.inner.shuffle_queue(shuffle_first);
     }
 
     pub fn clear(&self) {
-        self.lock().clear();
+        self.inner.clear();
     }
 }

@@ -81,7 +81,7 @@ impl AudioPlayer {
         if let Some(total) = self.total_duration {
             self.player.get_pos().min(total) // total duration is updated one tick before player.position
         } else {
-            Duration::ZERO
+            self.player.get_pos()
         }
     }
 
@@ -102,7 +102,11 @@ impl AudioPlayer {
     }
 
     pub fn skip(&mut self) {
-        self.player.skip_one();
+        if self.stopped {
+            self.queue.current_to_previous();
+        } else {
+            self.player.skip_one();
+        }
     }
 
     pub fn clear(&mut self) -> anyhow::Result<()> {
@@ -132,5 +136,12 @@ impl AudioPlayer {
         }
         let _ = self.sender.send(Clmp3Event::NewSongStarted);
         Ok(())
+    }
+
+    pub fn shuffle(&self) {
+        self.queue.shuffle_queue(self.stopped);
+        if self.stopped{
+            let _ = self.sender.send(Clmp3Event::NewSongStarted);
+        }
     }
 }

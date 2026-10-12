@@ -68,7 +68,8 @@ impl StatefulWidget for &mut QueueWidget {
         state: &mut AppState,
     ) {
         let map = state.metadata_map.read().unwrap();
-        let (prev_len, sources) = state.player.queue.snapshot();
+        let sources = state.player.queue.snapshot();
+        let prev_len = state.player.queue.prev_len();
 
         let items: Vec<ListItem> = sources
             .into_iter()
@@ -105,7 +106,6 @@ impl StatefulWidget for &mut QueueWidget {
 
 fn label(source: &SourceType, metadata: Option<&Metadata>) -> String {
     match source {
-        SourceType::SineWave(freq, _) => format!("Sine {freq}"),
         SourceType::File(path) => match metadata {
             Some(m) => format!("{} - {}", m.title, m.artist.as_deref().unwrap_or("unknown")),
             None => crate::source_builder::file_name(path),
@@ -115,8 +115,9 @@ fn label(source: &SourceType, metadata: Option<&Metadata>) -> String {
 
 fn border_title(state: &AppState, item_count: usize, prev_len: usize) -> Line<'static> {
     let mut spans = vec![
-        Span::styled(" q", border_title_first_style(Clmp3Widget::Queue, state)),
-        Span::styled("ueue ", border_title_style(Clmp3Widget::Queue, state)),
+        Span::styled(" q", border_title_style(Clmp3Widget::Queue, state)),
+        Span::styled("u", border_title_first_style(Clmp3Widget::Queue, state)),
+        Span::styled("eue ", border_title_style(Clmp3Widget::Queue, state)),
     ];
 
     if item_count > 0 {
@@ -165,8 +166,11 @@ impl InputWidget for QueueWidget {
             KeyCode::PageDown => {
                 self.select(state, |s| Self::move_by(s, |i| i.saturating_add(PAGE_STEP)))
             }
-            KeyCode::Char('s') => state.player.queue.shuffle(),
-            KeyCode::Char('c') => state.player.clear()?,
+            KeyCode::Char('s') => state.player.shuffle(),
+            KeyCode::Char('c') => {
+                state.clear_all_metadata();
+                state.player.clear()?
+            }
             _ => {}
         };
         Ok(())

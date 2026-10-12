@@ -68,6 +68,10 @@ impl AppState {
         self.metadata_map.read().unwrap().get(&id).cloned()
     }
 
+    pub fn clear_all_metadata(&self){
+        self.metadata_map.write().unwrap().clear();
+    }
+
     pub fn current_metadata(&self) -> Option<Arc<Metadata>> {
         if let Some(source) = self.player.queue.peek() {
             self.metadata(&source)

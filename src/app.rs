@@ -80,6 +80,11 @@ impl App {
         );
 
         map.insert(
+            (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Char('q')),
+            App::exit_app,
+        );
+
+        map.insert(
             (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Char('p')),
             |app| app.app_state.set_selected_widget(Clmp3Widget::Player),
         );
@@ -95,7 +100,7 @@ impl App {
         );
 
         map.insert(
-            (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Char('q')),
+            (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Char('u')),
             |app| app.app_state.set_selected_widget(Clmp3Widget::Queue),
         );
 
@@ -144,7 +149,7 @@ impl App {
                 self.app_state.last_error = Some((Clmp3Error::AudioError, vec![format!("{e:#}")]));
             }
 
-            self.check_size(terminal);
+            self.check_size(terminal)?;
             self.main_widget.draw(terminal, &mut self.app_state)?;
         }
         Ok(())
@@ -188,8 +193,8 @@ impl App {
         }
     }
 
-    fn check_size(&mut self, terminal: &DefaultTerminal) {
-        let size = terminal.size().unwrap();
+    fn check_size(&mut self, terminal: &DefaultTerminal) -> anyhow::Result<()> {
+        let size = terminal.size()?;
         if size.width < MIN_TERMINAL_WIDTH || size.height < MIN_TERMINAL_HEIGHT {
             self.app_state.last_error = Some((
                 Clmp3Error::TerminalSize,
@@ -203,7 +208,8 @@ impl App {
             && error == Clmp3Error::TerminalSize
         {
             self.app_state.last_error = None;
-        }
+        };
+        Ok(())
     }
 
     fn on_new_song(&mut self) -> Result<(), anyhow::Error> {
@@ -222,8 +228,9 @@ impl App {
         source_id: SourceId,
         dynamic_image: Option<DynamicImage>,
     ) -> Result<(), anyhow::Error> {
-        if let Some(metadata) = self.app_state.current_metadata()
-            && metadata.source_id != source_id
+        let current_id_opt = self.app_state.player.queue.peek().and_then(|s| s.id());
+        if let Some(current_id) = current_id_opt
+            && current_id != source_id
         {
             return Ok(());
         };
