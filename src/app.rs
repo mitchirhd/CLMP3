@@ -139,7 +139,8 @@ impl App {
                 }
                 // Clmp3Event::MouseInput(mouse_event) => todo!(),
                 Clmp3Event::Redraw => self.app_state.player.update(),
-                Clmp3Event::NewSongStarted => self.on_new_song(),
+                Clmp3Event::NewSongStarted => self.update_displayed_metadata(),
+                Clmp3Event::MetadataLoaded(source_id) => self.on_metadata_loaded(source_id),
                 Clmp3Event::CoverLoaded(source_id, dynamic_image) => {
                     self.on_cover_loaded(source_id, dynamic_image)
                 }
@@ -212,7 +213,7 @@ impl App {
         Ok(())
     }
 
-    fn on_new_song(&mut self) -> Result<(), anyhow::Error> {
+    fn update_displayed_metadata(&mut self) -> Result<(), anyhow::Error> {
         if let Some(metadata) = self.app_state.current_metadata() {
             self.app_state
                 .metadata_loader
@@ -223,12 +224,30 @@ impl App {
         Ok(())
     }
 
+    fn on_metadata_loaded(&mut self, source_id: SourceId) -> Result<(), anyhow::Error> {
+        if self
+            .app_state
+            .player
+            .queue
+            .peek()
+            .is_some_and(|s| s.id() == source_id)
+        {
+            self.update_displayed_metadata()?;
+        }
+        Ok(())
+    }
+
     fn on_cover_loaded(
         &mut self,
         source_id: SourceId,
         dynamic_image: Option<DynamicImage>,
     ) -> Result<(), anyhow::Error> {
-        let current_id_opt = self.app_state.player.queue.peek().and_then(|s| s.id());
+        let current_id_opt = self
+            .app_state
+            .player
+            .queue
+            .peek()
+            .and_then(|s| Some(s.id()));
         if let Some(current_id) = current_id_opt
             && current_id != source_id
         {

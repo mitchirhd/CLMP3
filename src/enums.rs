@@ -8,6 +8,7 @@ pub enum Clmp3Event {
     // MouseInput(MouseEvent),
     Redraw,
     NewSongStarted,
+    MetadataLoaded(SourceId),
     CoverLoaded(SourceId, Option<DynamicImage>),
 }
 

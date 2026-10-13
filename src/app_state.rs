@@ -64,7 +64,7 @@ impl AppState {
     }
 
     pub fn metadata(&self, source: &SourceType) -> Option<Arc<Metadata>> {
-        let id = source.id()?;
+        let id = source.id();
         self.metadata_map.read().unwrap().get(&id).cloned()
     }
 

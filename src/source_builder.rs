@@ -30,9 +30,9 @@ impl SourceType {
         }
     }
 
-    pub fn id(&self) -> Option<SourceId> {
+    pub fn id(&self) -> SourceId {
         match self {
-            SourceType::File(path) => Some(SourceId::File(path.clone())),
+            SourceType::File(path) => SourceId::File(path.clone()),
         }
     }
 }

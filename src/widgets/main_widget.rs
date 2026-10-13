@@ -159,7 +159,7 @@ impl StatefulWidget for &mut MainWidget {
             .constraints([Constraint::Fill(1), Constraint::Max(7)])
             .areas(area);
 
-        let queue_width = ((display_area.width as f32 * 0.2f32) as u16).clamp(30, 100);
+        let queue_width = ((display_area.width as f32 * 0.2f32) as u16).clamp(34, 100);
 
         let [display_area, queue_area] = Layout::default()
             .direction(Direction::Horizontal)

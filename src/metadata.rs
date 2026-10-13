@@ -116,10 +116,11 @@ impl MetadataLoader {
                 }
                 let metadata = Metadata::from_file(id.clone(), &path);
                 let mut map_write = map.write().unwrap();
-                map_write.insert(id, Arc::new(metadata));
+                map_write.insert(id.clone(), Arc::new(metadata));
                 if map_write.len() == 1 {
                     let _ = event_tx.send(Clmp3Event::NewSongStarted);
                 }
+                let _ = event_tx.send(Clmp3Event::MetadataLoaded(id));
             }
         });
         jobs
