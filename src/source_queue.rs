@@ -119,10 +119,11 @@ impl SourceQueue {
             insert_index += 1;
         }
 
-        if let Some(max) = max_selected {
-            if decrement > 0 && max + 1 == insert_index + decrement {
-                insert_index += 1;
-            }
+        if let Some(max) = max_selected
+            && decrement > 0
+            && max + 1 == insert_index + decrement
+        {
+            insert_index += 1;
         }
 
         if insert_index < contents.previous.len() {
@@ -137,12 +138,11 @@ impl SourceQueue {
         }
     }
 
-    fn delete_at(&self, index: usize){
+    fn delete_at(&self, index: usize) {
         let mut contents = self.lock();
-        if index < contents.previous.len(){
+        if index < contents.previous.len() {
             contents.previous.remove(index);
-        }
-        else{
+        } else {
             contents.upcoming.remove(index);
         }
     }
@@ -196,11 +196,11 @@ impl SharedQueue {
         self.inner.clear();
     }
 
-    pub fn swap(&self, insert_index: usize, indexes_to_insert: &Vec<usize>) {
-        self.inner.swap(insert_index, indexes_to_insert.clone());
+    pub fn swap(&self, insert_index: usize, indexes_to_insert: &[usize]) {
+        self.inner.swap(insert_index, indexes_to_insert.to_owned());
     }
 
-    pub fn delete_at(&self, index: usize){
+    pub fn delete_at(&self, index: usize) {
         self.inner.delete_at(index);
     }
 }

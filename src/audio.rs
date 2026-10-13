@@ -140,7 +140,7 @@ impl AudioPlayer {
 
     pub fn shuffle(&self) {
         self.queue.shuffle_queue(self.stopped);
-        if self.stopped{
+        if self.stopped {
             let _ = self.sender.send(Clmp3Event::NewSongStarted);
         }
     }

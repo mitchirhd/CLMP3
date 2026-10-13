@@ -242,12 +242,7 @@ impl App {
         source_id: SourceId,
         dynamic_image: Option<DynamicImage>,
     ) -> Result<(), anyhow::Error> {
-        let current_id_opt = self
-            .app_state
-            .player
-            .queue
-            .peek()
-            .and_then(|s| Some(s.id()));
+        let current_id_opt = self.app_state.player.queue.peek().map(|s| s.id());
         if let Some(current_id) = current_id_opt
             && current_id != source_id
         {

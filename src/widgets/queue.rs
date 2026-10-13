@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use anyhow::Ok;
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
-    style::{Color, Style},
+    style::Style,
     symbols::border,
     text::{Line, Span},
     widgets::{Block, List, ListItem, ListState, StatefulWidget},
@@ -80,13 +80,12 @@ impl QueueWidget {
     }
 
     fn on_move(&mut self, state: &AppState) {
-        if let Some(selected_indexes) = &self.selected_indexes {
-            if let Some(current_index) = self.queue_state.selected()
-                && current_index != state.player.queue.prev_len()
-            {
-                state.player.queue.swap(current_index, selected_indexes);
-                self.selected_indexes = None;
-            }
+        if let Some(selected_indexes) = &self.selected_indexes
+            && let Some(current_index) = self.queue_state.selected()
+            && current_index != state.player.queue.prev_len()
+        {
+            state.player.queue.swap(current_index, selected_indexes);
+            self.selected_indexes = None;
         }
     }
 

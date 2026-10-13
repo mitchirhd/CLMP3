@@ -68,7 +68,7 @@ impl AppState {
         self.metadata_map.read().unwrap().get(&id).cloned()
     }
 
-    pub fn clear_all_metadata(&self){
+    pub fn clear_all_metadata(&self) {
         self.metadata_map.write().unwrap().clear();
     }
 
