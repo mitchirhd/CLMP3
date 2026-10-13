@@ -140,10 +140,11 @@ impl SourceQueue {
 
     fn delete_at(&self, index: usize) {
         let mut contents = self.lock();
-        if index < contents.previous.len() {
+        let prev_len = contents.previous.len();
+        if index < prev_len {
             contents.previous.remove(index);
         } else {
-            contents.upcoming.remove(index);
+            contents.upcoming.remove(index - prev_len);
         }
     }
 }

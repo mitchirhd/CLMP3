@@ -24,12 +24,13 @@ pub struct AppState {
 impl AppState {
     pub fn new(event_tx: Sender<Clmp3Event>, player: AudioPlayer) -> AppState {
         let metadata_map = Arc::new(RwLock::new(HashMap::new()));
+        let queue = player.queue.clone();
         AppState {
             player,
             selected_widget: Clmp3Widget::Player,
             last_display_widget: Clmp3Widget::Display,
             volume_changed_time: None,
-            metadata_loader: Arc::new(MetadataLoader::new(event_tx, metadata_map.clone())),
+            metadata_loader: Arc::new(MetadataLoader::new(event_tx, metadata_map.clone(), queue)),
             metadata_map,
             last_error: None,
         }

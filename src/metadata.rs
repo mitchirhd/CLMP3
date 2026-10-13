@@ -16,6 +16,7 @@ use lofty::{
 use crate::{
     enums::Clmp3Event,
     source_builder::{SourceId, file_name},
+    source_queue::SharedQueue,
 };
 
 #[derive(Clone)]
@@ -93,8 +94,12 @@ pub struct MetadataLoader {
 pub type MetadataMap = Arc<RwLock<HashMap<SourceId, Arc<Metadata>>>>;
 
 impl MetadataLoader {
-    pub fn new(event_tx: Sender<Clmp3Event>, map: MetadataMap) -> MetadataLoader {
-        let loader_jobs = Self::spawn_loader_thread(event_tx.clone(), map);
+    pub fn new(
+        event_tx: Sender<Clmp3Event>,
+        map: MetadataMap,
+        queue: SharedQueue,
+    ) -> MetadataLoader {
+        let loader_jobs = Self::spawn_loader_thread(event_tx.clone(), map, queue);
         let pic_jobs = Self::spawn_pic_thread(event_tx);
 
         MetadataLoader {
@@ -106,6 +111,7 @@ impl MetadataLoader {
     fn spawn_loader_thread(
         event_tx: Sender<Clmp3Event>,
         map: MetadataMap,
+        queue: SharedQueue,
     ) -> mpsc::Sender<(SourceId, PathBuf)> {
         let (jobs, inbox) = mpsc::channel::<(SourceId, PathBuf)>();
 
@@ -120,7 +126,11 @@ impl MetadataLoader {
                 if map_write.len() == 1 {
                     let _ = event_tx.send(Clmp3Event::NewSongStarted);
                 }
-                let _ = event_tx.send(Clmp3Event::MetadataLoaded(id));
+                if let Some(source) = queue.peek()
+                    && source.id() == id
+                {
+                    let _ = event_tx.send(Clmp3Event::MetadataLoaded(id));
+                }
             }
         });
         jobs
