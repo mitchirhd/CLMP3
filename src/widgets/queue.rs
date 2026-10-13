@@ -209,6 +209,10 @@ fn border_title_bottom(state: &AppState, border: border::Set<'static>) -> Line<'
         Span::raw(border.horizontal_top),
         Span::styled(" swap ", text_style),
         Span::styled("🢂 ", button_style),
+        Span::raw(border.horizontal_top),
+        Span::raw(border.horizontal_top),
+        Span::styled(" remove ", text_style),
+        Span::styled("del ", button_style),
     ];
 
     Line::from(spans)

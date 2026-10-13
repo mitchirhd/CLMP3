@@ -154,6 +154,8 @@ impl StatefulWidget for &mut MainWidget {
     ) where
         Self: Sized,
     {
+        state.reset_view_if_idle();
+
         let [display_area, player_area] = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Fill(1), Constraint::Max(7)])

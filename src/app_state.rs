@@ -11,11 +11,15 @@ use crate::{
     source_builder::SourceType,
 };
 
+const DRAW_VOLUME_DURATION_SECS: u64 = 1;
+const VIEW_RESET_SECS: u64 = 10;
+
 pub struct AppState {
     pub player: AudioPlayer,
     selected_widget: Clmp3Widget,
     last_display_widget: Clmp3Widget,
     volume_changed_time: Option<Instant>,
+    last_input_time: Option<Instant>,
     pub metadata_loader: Arc<MetadataLoader>,
     pub metadata_map: MetadataMap,
     pub last_error: Option<(Clmp3Error, Vec<String>)>,
@@ -30,6 +34,7 @@ impl AppState {
             selected_widget: Clmp3Widget::Player,
             last_display_widget: Clmp3Widget::Display,
             volume_changed_time: None,
+            last_input_time: None,
             metadata_loader: Arc::new(MetadataLoader::new(event_tx, metadata_map.clone(), queue)),
             metadata_map,
             last_error: None,
@@ -57,11 +62,24 @@ impl AppState {
 
     pub fn draw_volume_slider(&self) -> bool {
         if let Some(time) = self.volume_changed_time
-            && time.elapsed().as_secs() < 1
+            && time.elapsed().as_secs() < DRAW_VOLUME_DURATION_SECS
         {
             return true;
         }
         false
+    }
+
+    pub fn set_last_input_time(&mut self, val: Instant) {
+        self.last_input_time = Some(val);
+    }
+
+    pub fn reset_view_if_idle(&mut self) {
+        if let Some(time) = self.last_input_time
+            && time.elapsed().as_secs() > VIEW_RESET_SECS
+        {
+            self.last_display_widget = Clmp3Widget::Display;
+            self.selected_widget = Clmp3Widget::Player;
+        }
     }
 
     pub fn metadata(&self, source: &SourceType) -> Option<Arc<Metadata>> {

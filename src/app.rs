@@ -3,7 +3,7 @@ use std::{
     io,
     sync::mpsc::{self, Receiver, Sender},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
@@ -133,10 +133,7 @@ impl App {
             let event = self.event_rx.recv().map_err(io::Error::other)?;
 
             let result = match event {
-                Clmp3Event::KeyInput(key_event) => {
-                    self.handle_key_event(key_event);
-                    anyhow::Ok(())
-                }
+                Clmp3Event::KeyInput(key_event) => self.handle_key_event(key_event),
                 // Clmp3Event::MouseInput(mouse_event) => todo!(),
                 Clmp3Event::Redraw => self.app_state.player.update(),
                 Clmp3Event::NewSongStarted => self.update_displayed_metadata(),
@@ -156,7 +153,8 @@ impl App {
         Ok(())
     }
 
-    fn handle_key_event(&mut self, key_event: KeyEvent) {
+    fn handle_key_event(&mut self, key_event: KeyEvent) -> anyhow::Result<()> {
+        self.app_state.set_last_input_time(Instant::now());
         let KeyEvent {
             kind,
             modifiers,
@@ -164,7 +162,7 @@ impl App {
             ..
         } = key_event;
         if kind != KeyEventKind::Press {
-            return;
+            return anyhow::Ok(());
         }
 
         if let Some(handler) = self.handler_map.get(&(kind, modifiers, code)).copied() {
@@ -172,7 +170,8 @@ impl App {
         } else {
             self.main_widget
                 .widget_controls(modifiers, code, &mut self.app_state);
-        }
+        };
+        anyhow::Ok(())
     }
 
     fn exit_app(app: &mut App) {
