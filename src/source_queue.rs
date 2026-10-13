@@ -90,6 +90,62 @@ impl SourceQueue {
         contents.previous.clear();
         contents.upcoming.clear();
     }
+
+    fn swap(&self, mut insert_index: usize, mut indexes_to_insert: Vec<usize>) {
+        let mut contents = self.lock();
+        let mut temp_vec: Vec<Arc<SourceType>> = Vec::new();
+        indexes_to_insert.sort_by(|a, b| b.cmp(a));
+        let prev_len = contents.previous.len();
+        let mut decrement = 0;
+        let max_selected = indexes_to_insert.first().copied();
+        for index in indexes_to_insert {
+            if index < insert_index {
+                decrement += 1;
+            }
+
+            if index < prev_len {
+                temp_vec.push(contents.previous.remove(index))
+            } else if let Some(source) = contents.upcoming.remove(index - prev_len) {
+                temp_vec.push(source);
+            }
+        }
+        temp_vec.reverse();
+
+        if decrement > 0 {
+            insert_index += 1;
+        }
+        insert_index -= decrement;
+        if insert_index == contents.previous.len() {
+            insert_index += 1;
+        }
+
+        if let Some(max) = max_selected {
+            if decrement > 0 && max + 1 == insert_index + decrement {
+                insert_index += 1;
+            }
+        }
+
+        if insert_index < contents.previous.len() {
+            contents
+                .previous
+                .splice(insert_index..insert_index, temp_vec);
+        } else {
+            let at = (insert_index - contents.previous.len()).min(contents.upcoming.len());
+            let tail = contents.upcoming.split_off(at);
+            contents.upcoming.extend(temp_vec);
+            contents.upcoming.extend(tail);
+        }
+    }
+
+    fn delete_at(&self, index: usize){
+        let mut contents = self.lock();
+        if index < contents.previous.len(){
+            contents.previous.remove(index);
+        }
+        else{
+            contents.upcoming.remove(index);
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -138,5 +194,13 @@ impl SharedQueue {
 
     pub fn clear(&self) {
         self.inner.clear();
+    }
+
+    pub fn swap(&self, insert_index: usize, indexes_to_insert: &Vec<usize>) {
+        self.inner.swap(insert_index, indexes_to_insert.clone());
+    }
+
+    pub fn delete_at(&self, index: usize){
+        self.inner.delete_at(index);
     }
 }
