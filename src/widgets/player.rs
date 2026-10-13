@@ -1,8 +1,3 @@
-use std::{
-    sync::Arc,
-    time::{Duration, Instant},
-};
-
 use anyhow::Ok;
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
@@ -13,10 +8,14 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, LineGauge, Paragraph, StatefulWidget, Widget},
 };
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use crate::{
     app_state::AppState,
-    enums::{Clmp3Widget, WidgetArea},
+    enums::{Clmp3Error, Clmp3Widget, WidgetArea},
     metadata::Metadata,
     widgets::{
         render_helper::{
@@ -34,11 +33,6 @@ pub struct PlayerWidget {}
 impl PlayerWidget {
     pub fn new() -> PlayerWidget {
         PlayerWidget {}
-    }
-
-    fn change_volume(&mut self, state: &mut AppState, f: impl FnOnce(f32, f32) -> f32) {
-        state.player.set_volume(f(state.player.volume(), VOL_STEP));
-        state.set_volume_changed_time(Instant::now());
     }
 
     fn render_volume(&self, area: Rect, buf: &mut Buffer, state: &AppState) {
@@ -122,6 +116,10 @@ fn border_title_bottom(
         Span::raw(border.horizontal_top),
         Span::styled(" ⏭ ", text_style),
         Span::styled("🢂 ", button_style),
+        Span::raw(border.horizontal_top),
+        Span::raw(border.horizontal_top),
+        Span::styled(" scrub ", text_style),
+        Span::styled("shift + 🢀 🢂 ", button_style),
     ];
 
     let right_spans = vec![
@@ -193,18 +191,45 @@ fn calculate_time_str(duration: &Duration) -> String {
     format!("{:02}:{:02}", min, secs)
 }
 
+fn change_volume(state: &mut AppState, f: impl FnOnce(f32, f32) -> f32) {
+    state.player.set_volume(f(state.player.volume(), VOL_STEP));
+    state.set_volume_changed_time(Instant::now());
+}
+
+fn on_left(state: &mut AppState, modifier: KeyModifiers) {
+    let result = if modifier == KeyModifiers::SHIFT {
+        state.player.scrub(true)
+    } else {
+        state.player.previous()
+    };
+
+    if let Err(e) = result {
+        state.last_error = Some((Clmp3Error::AudioError, vec![format!("{e:#}")]));
+    }
+}
+
+fn on_right(state: &mut AppState, modifier: KeyModifiers) {
+    if modifier == KeyModifiers::SHIFT {
+        if let Err(e) = state.player.scrub(false) {
+            state.last_error = Some((Clmp3Error::AudioError, vec![format!("{e:#}")]));
+        }
+    } else {
+        state.player.skip();
+    }
+}
+
 impl InputWidget for PlayerWidget {
     fn on_input(
         &mut self,
-        _modifier: KeyModifiers,
+        modifier: KeyModifiers,
         key: KeyCode,
         state: &mut AppState,
     ) -> anyhow::Result<()> {
         match key {
-            KeyCode::Up => self.change_volume(state, |vol, step| vol + step),
-            KeyCode::Down => self.change_volume(state, |vol, step| vol - step),
-            KeyCode::Right => state.player.skip(),
-            KeyCode::Left => state.player.previous()?,
+            KeyCode::Up => change_volume(state, |vol, step| vol + step),
+            KeyCode::Down => change_volume(state, |vol, step| vol - step),
+            KeyCode::Right => on_right(state, modifier),
+            KeyCode::Left => on_left(state, modifier),
             _ => {}
         };
         Ok(())

@@ -1,3 +1,4 @@
+use anyhow::Context;
 use rodio::source::Source;
 use rodio::{DeviceSinkError, MixerDeviceSink, Player};
 use std::path::Path;
@@ -8,6 +9,7 @@ use crate::enums::Clmp3Event;
 use crate::source_queue::SharedQueue;
 
 const RESTART_THRESHOLD: Duration = Duration::from_secs(1);
+const SCRUB_STEP_MILLIS: Duration = Duration::from_millis(1000);
 
 pub struct AudioPlayer {
     _sink: MixerDeviceSink,
@@ -94,7 +96,11 @@ impl AudioPlayer {
 
         if should_go_previous {
             self.queue.previous_to_current();
-            return self.play_front_or_stop();
+            if !self.stopped {
+                return self.play_front_or_stop();
+            } else {
+                let _ = self.sender.send(Clmp3Event::NewSongStarted);
+            }
         } else if !self.stopped {
             self.player.try_seek(Duration::ZERO)?;
         };
@@ -104,6 +110,7 @@ impl AudioPlayer {
     pub fn skip(&mut self) {
         if self.stopped {
             self.queue.current_to_previous();
+            let _ = self.sender.send(Clmp3Event::NewSongStarted);
         } else {
             self.player.skip_one();
         }
@@ -112,6 +119,23 @@ impl AudioPlayer {
     pub fn clear(&mut self) -> anyhow::Result<()> {
         self.queue.clear();
         self.play_front_or_stop()
+    }
+
+    pub fn scrub(&self, backwards: bool) -> anyhow::Result<()> {
+        let curr_pos = self.player.get_pos();
+        let mut scrub_pos = if backwards {
+            curr_pos - SCRUB_STEP_MILLIS
+        } else {
+            curr_pos + SCRUB_STEP_MILLIS
+        };
+
+        if let Some(total_dur) = self.total_duration {
+            scrub_pos = scrub_pos.clamp(Duration::ZERO, total_dur);
+        }
+        self.player
+            .try_seek(scrub_pos)
+            .context("Scrubbing is not supported by source")?;
+        Ok(())
     }
 
     pub fn update(&mut self) -> anyhow::Result<()> {
