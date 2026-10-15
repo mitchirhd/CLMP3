@@ -24,6 +24,7 @@ use crate::{
 };
 
 const PAGE_STEP: usize = 5;
+const PREV_ENTRIES_SHOWN: usize = 5;
 
 pub struct QueueWidget {
     queue_state: ListState,
@@ -41,7 +42,7 @@ impl QueueWidget {
     fn update_queue_state(&mut self, state: &AppState) {
         if state.selected_widget() != Clmp3Widget::Queue {
             self.queue_state.select(None);
-            *self.queue_state.offset_mut() = state.player.queue.prev_len().saturating_sub(5);
+            *self.queue_state.offset_mut() = state.player.queue.prev_len().saturating_sub(PREV_ENTRIES_SHOWN);
         }
     }
 
@@ -109,10 +110,24 @@ impl StatefulWidget for &mut QueueWidget {
         let sources = state.player.queue.snapshot();
         let prev_len = state.player.queue.prev_len();
 
+        let list_height = area.height as usize;
+        let min_index = self
+            .queue_state
+            .selected()
+            .map_or(prev_len.saturating_sub(PREV_ENTRIES_SHOWN), |s| s.saturating_sub(list_height));
+        let max_index = self
+            .queue_state
+            .selected()
+            .map_or(list_height, |s| s.saturating_add(list_height));
+
         let items: Vec<ListItem> = sources
             .into_iter()
             .enumerate()
             .map(|(i, source)| {
+                if i < min_index || max_index < i {
+                    return ListItem::new("");
+                }
+
                 let metadata = map.get(&source.id());
                 let label = label(&source, metadata.map(|m| m.as_ref()));
 
