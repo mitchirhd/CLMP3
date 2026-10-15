@@ -215,7 +215,7 @@ fn display_border_bottom_title(
                 Span::raw(border.horizontal_top),
                 Span::raw(border.horizontal_top),
                 Span::styled(" load dir ", text_style),
-                Span::styled("🢂 + shift ", button_style),
+                Span::styled("shift + 🢂 ", button_style),
             ]))
         }
         _ => None,
