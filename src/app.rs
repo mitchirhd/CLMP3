@@ -224,12 +224,17 @@ impl App {
 
     fn load_current_pic(&mut self) -> Result<(), anyhow::Error> {
         if let Some(metadata) = self.app_state.current_metadata() {
+            if let Some(displayed_id) = &self.main_widget.display_widget.current_source_id
+                && displayed_id == &metadata.source.id()
+            {
+                return Ok(());
+            }
+
             self.app_state
                 .metadata_loader
                 .load_pic(metadata.source.clone());
-        } else {
-            self.main_widget.display_widget.update_state(None);
         }
+        self.main_widget.display_widget.update_state(None, None);
         Ok(())
     }
 
@@ -253,7 +258,9 @@ impl App {
             return Ok(()); // cover isn't current anymore
         }
 
-        self.main_widget.display_widget.update_state(dynamic_image);
+        self.main_widget
+            .display_widget
+            .update_state(dynamic_image, Some(source.id()));
 
         Ok(())
     }

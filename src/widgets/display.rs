@@ -5,9 +5,12 @@ use ratatui::{
 };
 use ratatui_image::{Resize, StatefulImage, picker::Picker, protocol::StatefulProtocol};
 
+use crate::source_builder::SourceId;
+
 pub struct DisplayWidget {
     picker: Picker,
     image_state: Option<StatefulProtocol>,
+    pub current_source_id: Option<SourceId>,
 }
 
 impl DisplayWidget {
@@ -16,11 +19,13 @@ impl DisplayWidget {
         Ok(DisplayWidget {
             picker,
             image_state: None,
+            current_source_id: None,
         })
     }
 
-    pub fn update_state(&mut self, new_image: Option<DynamicImage>) {
+    pub fn update_state(&mut self, new_image: Option<DynamicImage>, source_id: Option<SourceId>) {
         self.image_state = new_image.map(|img| self.picker.new_resize_protocol(img));
+        self.current_source_id = source_id;
     }
 }
 

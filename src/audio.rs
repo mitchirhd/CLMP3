@@ -188,8 +188,8 @@ impl AudioPlayer {
             self.stopped = false;
         } else {
             self.stopped = true;
-            let _ = self.sender.send(Clmp3Event::NewSongStarted);
         }
+        let _ = self.sender.send(Clmp3Event::NewSongStarted);
     }
 
     fn start_built(&mut self, result: BuildResult) -> anyhow::Result<()> {

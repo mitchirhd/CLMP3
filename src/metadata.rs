@@ -200,9 +200,6 @@ impl MetadataLoader {
 
                 let mut map_write = map.write().unwrap();
                 map_write.insert(source.id(), Arc::new(metadata));
-                if map_write.len() == 1 {
-                    let _ = event_tx.send(Clmp3Event::NewSongStarted);
-                }
                 if let Some(playing_source) = queue.peek()
                     && playing_source.id() == source.id()
                 {
