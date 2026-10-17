@@ -166,7 +166,9 @@ fn render_progress_bar(area: Rect, buf: &mut Buffer, state: &AppState) {
 }
 
 fn gauge_data(state: &AppState) -> (f64, String) {
-    if let Some(total) = state.player.total_duration {
+    if state.player.source_builder.loading() {
+        (0.0, String::from("loading…"))
+    } else if let Some(total) = state.player.total_duration {
         let total_secs = total.as_secs_f64();
         if total_secs != 0.0 {
             let ratio = state.player.position().as_secs_f64() / total_secs;

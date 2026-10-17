@@ -3,6 +3,11 @@ use std::{
     io::Cursor,
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    sync::{
+        Arc,
+        mpsc::{self, Receiver, TryRecvError},
+    },
+    thread,
 };
 
 use anyhow::{Context, bail};
@@ -119,4 +124,66 @@ pub enum SourceId {
     None,
     File(PathBuf),
     Url(String),
+}
+
+pub type BuildResult = anyhow::Result<Box<dyn Source<Item = f32> + Send>>;
+
+pub enum PollResult {
+    Idle,
+    Pending,
+    Stale,
+    Ready(BuildResult),
+    Failed,
+}
+
+struct PendingSource {
+    pub source: Arc<SourceType>,
+    pub receiver: Receiver<BuildResult>, // dropping it discards the result of the build
+}
+
+pub struct SourceBuilder {
+    pending: Option<PendingSource>,
+}
+
+impl SourceBuilder {
+    pub fn new() -> SourceBuilder {
+        SourceBuilder { pending: None }
+    }
+
+    pub fn loading(&self) -> bool {
+        self.pending.is_some()
+    }
+
+    pub fn remove_pending(&mut self) {
+        self.pending = None;
+    }
+
+    pub fn poll(&mut self, front: Option<Arc<SourceType>>) -> PollResult {
+        let Some(pending) = &self.pending else {
+            return PollResult::Idle;
+        };
+
+        if front.is_none_or(|f| !Arc::ptr_eq(&f, &pending.source)) {
+            return PollResult::Stale;
+        };
+
+        match pending.receiver.try_recv() {
+            Ok(result) => PollResult::Ready(result),
+            Err(TryRecvError::Empty) => PollResult::Pending,
+            Err(TryRecvError::Disconnected) => PollResult::Failed,
+        }
+    }
+
+    pub fn start_building(&mut self, source: Arc<SourceType>) {
+        let (result_tx, result_rx) = mpsc::channel();
+        let source_clone = source.clone();
+        thread::spawn(move || {
+            let _ = result_tx.send(source_clone.build());
+        });
+
+        self.pending = Some(PendingSource {
+            source,
+            receiver: result_rx,
+        });
+    }
 }
