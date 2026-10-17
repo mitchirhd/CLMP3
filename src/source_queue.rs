@@ -32,8 +32,8 @@ impl SourceQueue {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
-    fn enqueue(&self, item: SourceType) {
-        self.lock().upcoming.push_back(Arc::new(item));
+    fn enqueue(&self, item: Arc<SourceType>) {
+        self.lock().upcoming.push_back(item);
     }
 
     fn current_to_previous(&self) {
@@ -185,7 +185,7 @@ impl SharedQueue {
         self.inner.snapshot()
     }
 
-    pub fn enqueue(&self, item: SourceType) {
+    pub fn enqueue(&self, item: Arc<SourceType>) {
         self.inner.enqueue(item);
     }
 

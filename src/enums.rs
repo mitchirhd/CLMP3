@@ -1,15 +1,17 @@
+use std::sync::Arc;
+
 use crossterm::event::KeyEvent;
 use image::DynamicImage;
 
-use crate::source_builder::SourceId;
+use crate::source_builder::SourceType;
 
 pub enum Clmp3Event {
     KeyInput(KeyEvent),
     // MouseInput(MouseEvent),
     Redraw,
     NewSongStarted,
-    MetadataLoaded(SourceId),
-    CoverLoaded(SourceId, Option<DynamicImage>),
+    CurrentMetadataLoaded(Arc<SourceType>),
+    CoverLoaded(Arc<SourceType>, Option<DynamicImage>),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -18,6 +20,7 @@ pub enum Clmp3Widget {
     Display,
     Load,
     Queue,
+    Online,
 }
 
 impl Clmp3Widget {
@@ -27,6 +30,7 @@ impl Clmp3Widget {
             Clmp3Widget::Display => WidgetArea::Display,
             Clmp3Widget::Load => WidgetArea::Display,
             Clmp3Widget::Queue => WidgetArea::Queue,
+            Clmp3Widget::Online => WidgetArea::Display,
         }
     }
 }

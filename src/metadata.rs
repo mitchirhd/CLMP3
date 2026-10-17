@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     path::PathBuf,
+    process::Command,
     sync::{
         Arc, RwLock,
         mpsc::{self, Sender},
@@ -15,7 +16,8 @@ use lofty::{
 
 use crate::{
     enums::Clmp3Event,
-    source_builder::{SourceId, file_name},
+    online_helper::OnlineHelper,
+    source_builder::{SourceId, SourceType},
     source_queue::SharedQueue,
 };
 
@@ -24,8 +26,7 @@ pub struct Metadata {
     pub title: String,
     pub artist: Option<String>,
     pub album: Option<String>,
-    pub path: PathBuf,
-    pub source_id: SourceId,
+    pub source: Arc<SourceType>,
 }
 
 impl Metadata {
@@ -33,19 +34,28 @@ impl Metadata {
         title: String,
         artist: Option<String>,
         album: Option<String>,
-        path: PathBuf,
-        source_id: SourceId,
+        source: Arc<SourceType>,
     ) -> Self {
         Self {
             title,
             artist,
             album,
-            path,
-            source_id,
+            source,
         }
     }
 
-    pub fn from_file(id: SourceId, path: &PathBuf) -> Metadata {
+    fn from_source(source: Arc<SourceType>) -> Metadata {
+        let (title, artist, album) = match &*source {
+            SourceType::File(path_buf) => Self::from_file(&source, path_buf),
+            SourceType::Url(url) => Self::from_url(&source, url),
+        };
+        Metadata::new(title, artist, album, source)
+    }
+
+    pub fn from_file(
+        source: &Arc<SourceType>,
+        path: &PathBuf,
+    ) -> (String, Option<String>, Option<String>) {
         let options = ParseOptions::new().read_properties(false);
         let tagged_file = Probe::open(path)
             .and_then(|probe| probe.options(options).read())
@@ -57,16 +67,53 @@ impl Metadata {
         let title = tag
             .and_then(|t| t.title())
             .map(|t| t.to_string())
-            .unwrap_or_else(|| file_name(path));
+            .unwrap_or_else(|| source.fallback_label());
 
         let artist = tag.as_ref().and_then(|t| t.artist()).map(|a| a.to_string());
 
         let album = tag.as_ref().and_then(|t| t.album()).map(|a| a.to_string());
 
-        Metadata::new(title, artist, album, path.clone(), id)
+        (title, artist, album)
     }
 
-    pub fn load_pic(path: &PathBuf) -> Option<DynamicImage> {
+    fn from_url(source: &Arc<SourceType>, url: &str) -> (String, Option<String>, Option<String>) {
+        let mut args = OnlineHelper::ytdlp_default_args();
+        args.push(String::from("--skip-download"));
+        args.push(String::from("--no-playlist"));
+        args.push(String::from("--print"));
+        args.push(String::from("%(title)s\t%(artist)s\t%(album)s"));
+        args.push(String::from(url));
+        let text = Command::new("yt-dlp")
+            .args(args)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .and_then(|o| String::from_utf8(o.stdout).ok());
+
+        
+        let fields: Vec<Option<String>> = text
+            .as_deref()
+            .unwrap_or_default()
+            .trim_end()
+            .split('\t')
+            .map(Self::clean_ytdlp_str)
+            .collect();
+
+        let field = |i: usize| fields.get(i).cloned().flatten();
+
+        let title = field(0).unwrap_or_else(|| source.fallback_label());
+        let artist = field(1);
+        let album = field(2);
+
+        (title, artist, album)
+    }
+
+    fn clean_ytdlp_str(s: &str) -> Option<String> {
+        let s = s.trim();
+        (!s.is_empty() && s != "NA").then(|| s.to_string())
+    }
+
+    fn pic_from_file(path: &PathBuf) -> Option<DynamicImage> {
         let options = ParseOptions::new().read_properties(false);
         let tagged_file = Probe::open(path)
             .and_then(|probe| probe.options(options).read())
@@ -84,11 +131,40 @@ impl Metadata {
 
         pic.and_then(|pic| image::load_from_memory(pic.data()).ok())
     }
+
+    fn pic_from_url(url: &str) -> Option<DynamicImage> {
+        let mut args = OnlineHelper::ytdlp_default_args();
+        args.push(String::from("--skip-download"));
+        args.push(String::from("--no-playlist"));
+        args.push(String::from("--print"));
+        args.push(String::from("thumbnail"));
+        args.push(String::from(url));
+        let out = Command::new("yt-dlp").args(args).output().ok()?;
+
+        if !out.status.success() {
+            return None;
+        }
+
+        let stdout = String::from_utf8(out.stdout).ok()?;
+        let thumb_url = stdout.lines().next()?.trim();
+        if thumb_url.is_empty() {
+            return None;
+        }
+
+        let bytes = reqwest::blocking::get(thumb_url)
+            .ok()?
+            .error_for_status()
+            .ok()?
+            .bytes()
+            .ok()?;
+
+        image::load_from_memory(&bytes).ok()
+    }
 }
 
 pub struct MetadataLoader {
-    loader_jobs: mpsc::Sender<(SourceId, PathBuf)>,
-    pic_jobs: mpsc::Sender<(SourceId, PathBuf)>,
+    loader_jobs: mpsc::Sender<Arc<SourceType>>,
+    pic_jobs: mpsc::Sender<Arc<SourceType>>,
 }
 
 pub type MetadataMap = Arc<RwLock<HashMap<SourceId, Arc<Metadata>>>>;
@@ -112,42 +188,45 @@ impl MetadataLoader {
         event_tx: Sender<Clmp3Event>,
         map: MetadataMap,
         queue: SharedQueue,
-    ) -> mpsc::Sender<(SourceId, PathBuf)> {
-        let (jobs, inbox) = mpsc::channel::<(SourceId, PathBuf)>();
+    ) -> mpsc::Sender<Arc<SourceType>> {
+        let (jobs, inbox) = mpsc::channel::<Arc<SourceType>>();
 
         thread::spawn(move || {
-            for (id, path) in inbox {
-                if map.read().unwrap().contains_key(&id) {
+            for source in inbox {
+                if map.read().unwrap().contains_key(&source.id()) {
                     continue;
                 }
-                let metadata = Metadata::from_file(id.clone(), &path);
+                let metadata = Metadata::from_source(source.clone());
+
                 let mut map_write = map.write().unwrap();
-                map_write.insert(id.clone(), Arc::new(metadata));
+                map_write.insert(source.id(), Arc::new(metadata));
                 if map_write.len() == 1 {
                     let _ = event_tx.send(Clmp3Event::NewSongStarted);
                 }
-                if let Some(source) = queue.peek()
-                    && source.id() == id
+                if let Some(playing_source) = queue.peek()
+                    && playing_source.id() == source.id()
                 {
-                    let _ = event_tx.send(Clmp3Event::MetadataLoaded(id));
+                    let _ = event_tx.send(Clmp3Event::CurrentMetadataLoaded(source));
                 }
             }
         });
         jobs
     }
 
-    fn spawn_pic_thread(event_tx: Sender<Clmp3Event>) -> mpsc::Sender<(SourceId, PathBuf)> {
-        let (jobs, inbox) = mpsc::channel::<(SourceId, PathBuf)>();
+    fn spawn_pic_thread(event_tx: Sender<Clmp3Event>) -> mpsc::Sender<Arc<SourceType>> {
+        let (jobs, inbox) = mpsc::channel::<Arc<SourceType>>();
 
         thread::spawn(move || {
-            while let Ok(mut job) = inbox.recv() {
+            while let Ok(mut source) = inbox.recv() {
                 while let Ok(newer) = inbox.try_recv() {
                     // skip old entries until arrived at newest
-                    job = newer;
+                    source = newer;
                 }
-                let (id, path) = job;
-                let img = Metadata::load_pic(&path);
-                if event_tx.send(Clmp3Event::CoverLoaded(id, img)).is_err() {
+                let img = match &*source.clone() {
+                    SourceType::File(path_buf) => Metadata::pic_from_file(path_buf),
+                    SourceType::Url(url) => Metadata::pic_from_url(url),
+                };
+                if event_tx.send(Clmp3Event::CoverLoaded(source, img)).is_err() {
                     break;
                 }
             }
@@ -156,11 +235,11 @@ impl MetadataLoader {
         jobs
     }
 
-    pub fn load(&self, id: SourceId, path: PathBuf) {
-        let _ = self.loader_jobs.send((id, path));
+    pub fn load(&self, source: Arc<SourceType>) {
+        let _ = self.loader_jobs.send(source);
     }
 
-    pub fn load_pic(&self, id: SourceId, path: PathBuf) {
-        let _ = self.pic_jobs.send((id, path));
+    pub fn load_pic(&self, source: Arc<SourceType>) {
+        let _ = self.pic_jobs.send(source);
     }
 }

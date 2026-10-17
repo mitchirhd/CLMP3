@@ -1,7 +1,10 @@
 use std::{
     collections::HashMap,
     io,
-    sync::mpsc::{self, Receiver, Sender},
+    sync::{
+        Arc,
+        mpsc::{self, Receiver, Sender},
+    },
     thread,
     time::{Duration, Instant},
 };
@@ -14,7 +17,7 @@ use crate::{
     app_state::AppState,
     audio::AudioPlayer,
     enums::{Clmp3Error, Clmp3Event},
-    source_builder::SourceId,
+    source_builder::SourceType,
 };
 use crate::{enums::Clmp3Widget, widgets::main_widget::MainWidget};
 
@@ -105,6 +108,11 @@ impl App {
         );
 
         map.insert(
+            (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Char('o')),
+            |app| app.app_state.set_selected_widget(Clmp3Widget::Online),
+        );
+
+        map.insert(
             (KeyEventKind::Press, KeyModifiers::NONE, KeyCode::Char(' ')),
             App::on_space,
         );
@@ -136,10 +144,10 @@ impl App {
                 Clmp3Event::KeyInput(key_event) => self.handle_key_event(key_event),
                 // Clmp3Event::MouseInput(mouse_event) => todo!(),
                 Clmp3Event::Redraw => self.app_state.player.update(),
-                Clmp3Event::NewSongStarted => self.update_displayed_metadata(),
-                Clmp3Event::MetadataLoaded(source_id) => self.on_metadata_loaded(source_id),
-                Clmp3Event::CoverLoaded(source_id, dynamic_image) => {
-                    self.on_cover_loaded(source_id, dynamic_image)
+                Clmp3Event::NewSongStarted => self.load_current_pic(),
+                Clmp3Event::CurrentMetadataLoaded(source) => self.on_metadata_loaded(source),
+                Clmp3Event::CoverLoaded(source, dynamic_image) => {
+                    self.on_cover_loaded(source, dynamic_image)
                 }
             };
 
@@ -165,7 +173,9 @@ impl App {
             return anyhow::Ok(());
         }
 
-        if let Some(handler) = self.handler_map.get(&(kind, modifiers, code)).copied() {
+        if !self.app_state.all_input_to_widget
+            && let Some(handler) = self.handler_map.get(&(kind, modifiers, code))
+        {
             handler(self);
         } else {
             self.main_widget
@@ -200,7 +210,7 @@ impl App {
                 Clmp3Error::TerminalSize,
                 Vec::from([
                     String::from("Terminal too small"),
-                    format!("Minimal width: {MIN_TERMINAL_WIDTH} lines"),
+                    format!("Minimal width: {MIN_TERMINAL_WIDTH} columns"),
                     format!("Minimal height: {MIN_TERMINAL_HEIGHT} lines"),
                 ]),
             ));
@@ -212,41 +222,36 @@ impl App {
         Ok(())
     }
 
-    fn update_displayed_metadata(&mut self) -> Result<(), anyhow::Error> {
+    fn load_current_pic(&mut self) -> Result<(), anyhow::Error> {
         if let Some(metadata) = self.app_state.current_metadata() {
             self.app_state
                 .metadata_loader
-                .load_pic(metadata.source_id.clone(), metadata.path.clone());
+                .load_pic(metadata.source.clone());
         } else {
             self.main_widget.display_widget.update_state(None);
         }
         Ok(())
     }
 
-    fn on_metadata_loaded(&mut self, source_id: SourceId) -> Result<(), anyhow::Error> {
-        if self
-            .app_state
-            .player
-            .queue
-            .peek()
-            .is_some_and(|s| s.id() == source_id)
+    fn on_metadata_loaded(&mut self, loaded_source: Arc<SourceType>) -> Result<(), anyhow::Error> {
+        if let Some(current_source) = self.app_state.player.queue.peek()
+            && current_source.id() == loaded_source.id()
         {
-            self.update_displayed_metadata()?;
+            self.load_current_pic()?;
         }
         Ok(())
     }
 
     fn on_cover_loaded(
         &mut self,
-        source_id: SourceId,
+        source: Arc<SourceType>,
         dynamic_image: Option<DynamicImage>,
     ) -> Result<(), anyhow::Error> {
-        let current_id_opt = self.app_state.player.queue.peek().map(|s| s.id());
-        if let Some(current_id) = current_id_opt
-            && current_id != source_id
+        if let Some(current_id) = self.app_state.player.queue.peek().map(|s| s.id())
+            && current_id != source.id()
         {
-            return Ok(());
-        };
+            return Ok(()); // cover isn't current anymore
+        }
 
         self.main_widget.display_widget.update_state(dynamic_image);
 

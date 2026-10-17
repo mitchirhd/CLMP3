@@ -17,7 +17,7 @@ use crate::{
     widgets::{
         render_helper::{
             border_button_style, border_text_style, border_title_first_style, border_title_style,
-            thickness,
+            block_thickness,
         },
         traits::InputWidget,
     },
@@ -42,7 +42,11 @@ impl QueueWidget {
     fn update_queue_state(&mut self, state: &AppState) {
         if state.selected_widget() != Clmp3Widget::Queue {
             self.queue_state.select(None);
-            *self.queue_state.offset_mut() = state.player.queue.prev_len().saturating_sub(PREV_ENTRIES_SHOWN);
+            *self.queue_state.offset_mut() = state
+                .player
+                .queue
+                .prev_len()
+                .saturating_sub(PREV_ENTRIES_SHOWN);
         }
     }
 
@@ -114,7 +118,9 @@ impl StatefulWidget for &mut QueueWidget {
         let min_index = self
             .queue_state
             .selected()
-            .map_or(prev_len.saturating_sub(PREV_ENTRIES_SHOWN), |s| s.saturating_sub(list_height));
+            .map_or(prev_len.saturating_sub(PREV_ENTRIES_SHOWN), |s| {
+                s.saturating_sub(list_height)
+            });
         let max_index = self
             .queue_state
             .selected()
@@ -147,7 +153,7 @@ impl StatefulWidget for &mut QueueWidget {
             })
             .collect();
 
-        let (thickness, style) = thickness(WidgetArea::Queue, state);
+        let (thickness, style) = block_thickness(WidgetArea::Queue, state);
         let (top_title_left, top_title_right) = border_title(state, items.len(), prev_len);
         let queue_block = Block::bordered()
             .title(top_title_left)
@@ -166,11 +172,9 @@ impl StatefulWidget for &mut QueueWidget {
 }
 
 fn label(source: &SourceType, metadata: Option<&Metadata>) -> String {
-    match source {
-        SourceType::File(path) => match metadata {
-            Some(m) => format!("{} - {}", m.title, m.artist.as_deref().unwrap_or("unknown")),
-            None => crate::source_builder::file_name(path),
-        },
+    match metadata {
+        Some(m) => format!("{} - {}", m.title, m.artist.as_deref().unwrap_or("unknown")),
+        None => source.fallback_label(),
     }
 }
 
@@ -258,7 +262,7 @@ impl InputWidget for QueueWidget {
             KeyCode::Char('s') => state.player.shuffle(),
             KeyCode::Char('c') => {
                 state.clear_all_metadata();
-                state.player.clear()?
+                state.player.clear();
             }
             _ => {}
         };

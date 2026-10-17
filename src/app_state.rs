@@ -23,6 +23,7 @@ pub struct AppState {
     pub metadata_loader: Arc<MetadataLoader>,
     pub metadata_map: MetadataMap,
     pub last_error: Option<(Clmp3Error, Vec<String>)>,
+    pub all_input_to_widget: bool,
 }
 
 impl AppState {
@@ -38,6 +39,7 @@ impl AppState {
             metadata_loader: Arc::new(MetadataLoader::new(event_tx, metadata_map.clone(), queue)),
             metadata_map,
             last_error: None,
+            all_input_to_widget: false,
         }
     }
 
@@ -79,6 +81,7 @@ impl AppState {
         {
             self.last_display_widget = Clmp3Widget::Display;
             self.selected_widget = Clmp3Widget::Player;
+            self.all_input_to_widget = false;
         }
     }
 

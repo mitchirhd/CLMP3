@@ -6,11 +6,9 @@
                "type": "lldb",
                "request": "launch",
                "program": "${workspaceFolder}/target/debug/clmp3",
-               "args": [],
+               "args": ["--browser-for-cookies", "firefox"],
                "cwd": "${workspaceFolder}",
                "preLaunchTask": "cargo build",
-               "stopAtEntry": false,
-               "externalConsole": false
            }
        ]
    }

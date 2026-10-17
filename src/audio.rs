@@ -116,9 +116,12 @@ impl AudioPlayer {
         }
     }
 
-    pub fn clear(&mut self) -> anyhow::Result<()> {
+    pub fn clear(&mut self) {
         self.queue.clear();
-        self.play_front_or_stop()
+        self.player.stop();
+        self.total_duration = None;
+        self.stopped = true;
+        let _ = self.sender.send(Clmp3Event::NewSongStarted);
     }
 
     pub fn scrub(&self, backwards: bool) -> anyhow::Result<()> {

@@ -6,11 +6,12 @@ use crate::{
     widgets::{
         display::DisplayWidget,
         load::LoadWidget,
+        online::OnlineWidget,
         player::PlayerWidget,
         queue::QueueWidget,
         render_helper::{
-            border_button_style, border_text_style, border_title_first_style, border_title_style,
-            messages_widget, thickness,
+            block_thickness, border_button_style, border_text_style, border_title_first_style,
+            border_title_style, messages_widget,
         },
         traits::InputWidget,
     },
@@ -32,6 +33,7 @@ pub struct MainWidget {
     pub display_widget: DisplayWidget,
     queue_widget: QueueWidget,
     load_widget: LoadWidget,
+    online_widget: OnlineWidget,
 }
 
 impl MainWidget {
@@ -41,6 +43,7 @@ impl MainWidget {
             display_widget: DisplayWidget::new()?,
             queue_widget: QueueWidget::new(),
             load_widget: LoadWidget::new(),
+            online_widget: OnlineWidget::new(),
         })
     }
 
@@ -50,6 +53,7 @@ impl MainWidget {
             Clmp3Widget::Display => None,
             Clmp3Widget::Load => Some(&mut self.load_widget),
             Clmp3Widget::Queue => Some(&mut self.queue_widget),
+            Clmp3Widget::Online => Some(&mut self.online_widget),
         };
         if let Some(input_widget) = input_widget
             && let Err(e) = input_widget.on_input(modifier, key, state)
@@ -75,7 +79,7 @@ impl MainWidget {
         buf: &mut ratatui::prelude::Buffer,
         state: &mut AppState,
     ) {
-        let (thickness, style) = thickness(WidgetArea::Display, state);
+        let (thickness, style) = block_thickness(WidgetArea::Display, state);
         let display_block = Block::bordered()
             .title(display_border_title(state, thickness))
             .title_bottom(display_border_bottom_title(state, thickness).unwrap_or_default())
@@ -87,6 +91,7 @@ impl MainWidget {
         match state.last_display_widget() {
             Clmp3Widget::Display => self.display_widget.render(inner, buf),
             Clmp3Widget::Load => self.load_widget.render(inner, buf),
+            Clmp3Widget::Online => self.online_widget.render(inner, buf, state),
             _ => {}
         }
 
@@ -185,8 +190,13 @@ fn display_border_title(state: &AppState, border: border::Set<'static>) -> Line<
         Span::styled(" d", border_title_first_style(Clmp3Widget::Display, state)),
         Span::styled("isplay ", border_title_style(Clmp3Widget::Display, state)),
         Span::raw(border.horizontal_top),
+        Span::raw(border.horizontal_top),
         Span::styled(" l", border_title_first_style(Clmp3Widget::Load, state)),
         Span::styled("oad ", border_title_style(Clmp3Widget::Load, state)),
+        Span::raw(border.horizontal_top),
+        Span::raw(border.horizontal_top),
+        Span::styled(" o", border_title_first_style(Clmp3Widget::Online, state)),
+        Span::styled("nline ", border_title_style(Clmp3Widget::Online, state)),
     ];
     Line::from(spans)
 }
@@ -216,6 +226,22 @@ fn display_border_bottom_title(
                 Span::raw(border.horizontal_top),
                 Span::styled(" load dir ", text_style),
                 Span::styled("shift + 🢂 ", button_style),
+            ]))
+        }
+        Clmp3Widget::Online => {
+            let button_style = border_button_style(Clmp3Widget::Online, state);
+            let text_style = border_text_style(Clmp3Widget::Online, state);
+            Some(Line::from(vec![
+                Span::styled(" start writing ", text_style),
+                Span::styled("⮠ ", button_style),
+                Span::raw(border.horizontal_top),
+                Span::raw(border.horizontal_top),
+                Span::styled(" load ", text_style),
+                Span::styled("🢂 ", button_style),
+                Span::raw(border.horizontal_top),
+                Span::raw(border.horizontal_top),
+                Span::styled(" stop writing ", text_style),
+                Span::styled("esc ", button_style),
             ]))
         }
         _ => None,

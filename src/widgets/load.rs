@@ -1,5 +1,3 @@
-use std::{fs, path::Path, sync::Arc, thread};
-
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
     layout::{Constraint, Direction, Layout},
@@ -10,11 +8,7 @@ use ratatui::{
 use ratatui_explorer::{FileExplorer, FileExplorerBuilder, Input, Theme};
 
 use crate::{
-    app_state::AppState,
-    audio::AudioPlayer,
-    metadata::MetadataLoader,
-    source_builder::{SourceId, SourceType},
-    source_queue::SharedQueue,
+    app_state::AppState, audio::AudioPlayer, local_file_helper::LocalFileHelper,
     widgets::traits::InputWidget,
 };
 
@@ -49,7 +43,7 @@ impl LoadWidget {
         let current = self.file_explorer.current();
         if current.is_dir {
             if modifier == KeyModifiers::SHIFT {
-                Self::load_dir(
+                LocalFileHelper::load_dir(
                     state.player.queue.clone(),
                     state.metadata_loader.clone(),
                     &current.path.clone(),
@@ -59,53 +53,12 @@ impl LoadWidget {
                 Input::Right
             }
         } else {
-            Self::load_file(
+            LocalFileHelper::load_file(
                 state.player.queue.clone(),
                 state.metadata_loader.clone(),
                 &current.path.clone(),
             );
             Input::None
-        }
-    }
-
-    fn load_file(queue: SharedQueue, loader: Arc<MetadataLoader>, path: &Path) {
-        let path = path.to_path_buf();
-        thread::spawn(move || {
-            Self::load_file_internal(&queue, &loader, &path);
-        });
-    }
-
-    fn load_file_internal(queue: &SharedQueue, loader: &Arc<MetadataLoader>, path: &Path) {
-        let file = fs::metadata(path).unwrap();
-        if !file.is_file() || !AudioPlayer::can_play(path) {
-            return;
-        }
-
-        queue.enqueue(SourceType::File(path.to_path_buf()));
-        let id = SourceId::File(path.to_path_buf());
-        loader.load(id, path.to_path_buf());
-    }
-
-    fn load_dir(queue: SharedQueue, loader: Arc<MetadataLoader>, start_path: &Path) {
-        let start_path = start_path.to_path_buf();
-        thread::spawn(move || {
-            Self::load_dir_internal(&queue, &loader, &start_path);
-        });
-    }
-
-    fn load_dir_internal(queue: &SharedQueue, loader: &Arc<MetadataLoader>, start_path: &Path) {
-        let Ok(dir) = fs::read_dir(start_path.to_string_lossy().into_owned()) else {
-            return;
-        };
-        for dir_entry in dir {
-            let Ok(dir_entry) = dir_entry else {
-                continue;
-            };
-            if dir_entry.file_type().unwrap().is_dir() {
-                Self::load_dir_internal(queue, loader, &dir_entry.path());
-            } else {
-                Self::load_file_internal(queue, loader, &dir_entry.path());
-            }
         }
     }
 }

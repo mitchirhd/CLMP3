@@ -2,13 +2,38 @@ mod app;
 mod enums;
 mod widgets;
 use app::App;
+
+use crate::online_helper::OnlineHelper;
 mod app_state;
 mod audio;
+mod local_file_helper;
 mod metadata;
+mod online_helper;
 mod source_builder;
 mod source_queue;
 
+use clap::Parser;
+
+#[derive(Parser)]
+struct Args {
+    /// Browser to take cookies from, e.g. firefox, chrome
+    #[arg(long)]
+    browser_for_cookies: Option<String>,
+
+    /// Path to a file containing cookies
+    #[arg(long)]
+    cookies_path: Option<String>,
+}
+
 fn main() -> anyhow::Result<()> {
+    let args = Args::parse();
+    if let Some(browser) = args.browser_for_cookies {
+        OnlineHelper::set_cookie_browser(browser);
+    }
+    if let Some(cookies_path) = args.cookies_path {
+        OnlineHelper::set_cookie_path(cookies_path);
+    }
+
     let mut terminal = ratatui::init();
 
     let app_result = App::new().and_then(|mut app| app.start(&mut terminal));

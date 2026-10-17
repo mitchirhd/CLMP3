@@ -11,7 +11,7 @@ use crate::{
     enums::{Clmp3Widget, WidgetArea},
 };
 
-pub fn thickness(check: WidgetArea, state: &AppState) -> (border::Set<'static>, Style) {
+pub fn block_thickness(check: WidgetArea, state: &AppState) -> (border::Set<'static>, Style) {
     if state.selected_widget().area() == check {
         (border::THICK, Style::default().light_blue())
     } else {

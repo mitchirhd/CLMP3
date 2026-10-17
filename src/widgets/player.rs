@@ -20,7 +20,7 @@ use crate::{
     widgets::{
         render_helper::{
             border_button_style, border_text_style, border_title_first_style, border_title_style,
-            thickness,
+            block_thickness,
         },
         traits::InputWidget,
     },
@@ -58,7 +58,7 @@ impl StatefulWidget for &PlayerWidget {
     where
         Self: Sized,
     {
-        let (thickness, style) = thickness(WidgetArea::Player, state);
+        let (thickness, style) = block_thickness(WidgetArea::Player, state);
         let (bottom_title_left, bottom_title_right) = border_title_bottom(state, thickness);
         let player_block = Block::bordered()
             .title(border_title(state))
