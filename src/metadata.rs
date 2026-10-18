@@ -89,7 +89,6 @@ impl Metadata {
             .filter(|o| o.status.success())
             .and_then(|o| String::from_utf8(o.stdout).ok());
 
-        
         let fields: Vec<Option<String>> = text
             .as_deref()
             .unwrap_or_default()
@@ -150,11 +149,11 @@ impl Metadata {
             return None;
         }
 
-        let bytes = reqwest::blocking::get(thumb_url)
+        let bytes = ureq::get(thumb_url)
+            .call()
             .ok()?
-            .error_for_status()
-            .ok()?
-            .bytes()
+            .body_mut()
+            .read_to_vec()
             .ok()?;
 
         image::load_from_memory(&bytes).ok()
@@ -169,10 +168,7 @@ pub struct MetadataLoader {
 pub type MetadataMap = Arc<RwLock<HashMap<SourceId, Arc<Metadata>>>>;
 
 impl MetadataLoader {
-    pub fn new(
-        event_tx: Sender<Clmp3Event>,
-        map: MetadataMap,
-    ) -> MetadataLoader {
+    pub fn new(event_tx: Sender<Clmp3Event>, map: MetadataMap) -> MetadataLoader {
         let loader_jobs = Self::spawn_loader_thread(map);
         let pic_jobs = Self::spawn_pic_thread(event_tx);
 
@@ -182,9 +178,7 @@ impl MetadataLoader {
         }
     }
 
-    fn spawn_loader_thread(
-        map: MetadataMap,
-    ) -> mpsc::Sender<Arc<SourceType>> {
+    fn spawn_loader_thread(map: MetadataMap) -> mpsc::Sender<Arc<SourceType>> {
         let (jobs, inbox) = mpsc::channel::<Arc<SourceType>>();
 
         thread::spawn(move || {

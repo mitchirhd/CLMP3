@@ -10,11 +10,11 @@ keywords = ["music", "player", "tui"]
 categories = ["command-line-utilities", "multimedia::audio"]
 
 [profile.release]
-lto = true
-strip = true
+opt-level = "z"
+lto = "fat"
 codegen-units = 1
 panic = "abort"
-opt-level = 3
+strip = true
 
 [dependencies]
 anyhow = "1.0.104"
@@ -25,8 +25,8 @@ lofty = "0.25.4"
 rand = "0.10.3"
 ratatui = "0.30.2"
 ratatui-explorer = "0.3.0"
-ratatui-image = { version = "11.1.0", default-features = false, features = ["image-defaults", "crossterm"] }
+ratatui-image = { version = "11.1.0", default-features = false, features = ["crossterm"] }
 ratatui-textarea = "0.9.3"
-reqwest = {version = "0.13.5", features = ["blocking"] }
-rodio = "0.22.2"
+rodio = { version = "0.22.2", default-features = false, features = ["playback", "mp3", "flac"] }
 tui-slider = "0.3.4"
+ureq = "3.4.2"

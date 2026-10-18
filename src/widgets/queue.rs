@@ -16,8 +16,8 @@ use crate::{
     source_builder::SourceType,
     widgets::{
         render_helper::{
-            border_button_style, border_text_style, border_title_first_style, border_title_style,
-            block_thickness,
+            block_thickness, border_button_style, border_text_style, border_title_first_style,
+            border_title_style,
         },
         traits::InputWidget,
     },
@@ -95,7 +95,9 @@ impl QueueWidget {
     }
 
     fn delete_selected(&self, state: &AppState) {
-        if let Some(selected) = self.queue_state.selected() {
+        if let Some(selected) = self.queue_state.selected()
+            && (selected != state.player.queue.prev_len() || state.player.stopped())
+        {
             state.player.queue.delete_at(selected);
         }
     }
@@ -173,7 +175,13 @@ impl StatefulWidget for &mut QueueWidget {
 
 fn label(source: &SourceType, metadata: Option<&Metadata>) -> String {
     match metadata {
-        Some(m) => format!("{} - {}", m.title, m.artist.as_deref().unwrap_or_default()),
+        Some(m) => {
+            let mut label_vec = vec![m.title.to_string()];
+            if let Some(artist) = m.artist.as_deref() {
+                label_vec.push(artist.to_string());
+            }
+            label_vec.join(" - ")
+        }
         None => source.fallback_label(),
     }
 }

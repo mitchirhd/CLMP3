@@ -19,8 +19,8 @@ use crate::{
     metadata::Metadata,
     widgets::{
         render_helper::{
-            border_button_style, border_text_style, border_title_first_style, border_title_style,
-            block_thickness,
+            block_thickness, border_button_style, border_text_style, border_title_first_style,
+            border_title_style,
         },
         traits::InputWidget,
     },

@@ -26,7 +26,12 @@ impl OnlineHelper {
     }
 
     fn fetch_url_internal(queue: &SharedQueue, loader: &Arc<MetadataLoader>, urls: Vec<String>) {
-        for url in urls {
+        for mut url in urls {
+            url = url.trim().to_string();
+            if url.is_empty() {
+                continue;
+            }
+
             let source = Arc::new(SourceType::Url(url));
             queue.enqueue(source.clone());
             loader.load(source);
