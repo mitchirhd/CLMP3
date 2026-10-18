@@ -4,4 +4,4 @@
 
 <img src="images/CLMP3 preview.png">
 
-Search through local audio files with the integrated file browser, load them into the queue, and play them through your default audio device.
+Search through local audio files with the integrated file browser, or paste links to content supported by yt-dlp into the application, load them into the queue, and play them through your default audio device.

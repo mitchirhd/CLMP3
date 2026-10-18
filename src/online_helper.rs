@@ -19,20 +19,18 @@ impl OnlineHelper {
         let _ = COOKIES_PATH.set(path);
     }
 
-    pub fn fetch_url(queue: SharedQueue, loader: Arc<MetadataLoader>, url: String) {
+    pub fn fetch_urls(queue: SharedQueue, loader: Arc<MetadataLoader>, urls: Vec<String>) {
         thread::spawn(move || {
-            Self::fetch_url_internal(&queue, &loader, url);
+            Self::fetch_url_internal(&queue, &loader, urls);
         });
     }
 
-    // pub fn fetch_urls(queue: &SharedQueue, loader: &Arc<MetadataLoader>, urls: Vec<String>) {
-    //     thread::spawn(move || {});
-    // }
-
-    fn fetch_url_internal(queue: &SharedQueue, loader: &Arc<MetadataLoader>, url: String) {
-        let source = Arc::new(SourceType::Url(url.clone()));
-        queue.enqueue(source.clone());
-        loader.load(source);
+    fn fetch_url_internal(queue: &SharedQueue, loader: &Arc<MetadataLoader>, urls: Vec<String>) {
+        for url in urls {
+            let source = Arc::new(SourceType::Url(url));
+            queue.enqueue(source.clone());
+            loader.load(source);
+        }
     }
 
     pub fn ytdlp_default_args() -> Vec<String> {

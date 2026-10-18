@@ -173,7 +173,7 @@ impl StatefulWidget for &mut QueueWidget {
 
 fn label(source: &SourceType, metadata: Option<&Metadata>) -> String {
     match metadata {
-        Some(m) => format!("{} - {}", m.title, m.artist.as_deref().unwrap_or("unknown")),
+        Some(m) => format!("{} - {}", m.title, m.artist.as_deref().unwrap_or_default()),
         None => source.fallback_label(),
     }
 }

@@ -192,7 +192,7 @@ fn display_border_title(state: &AppState, border: border::Set<'static>) -> Line<
         Span::raw(border.horizontal_top),
         Span::raw(border.horizontal_top),
         Span::styled(" l", border_title_first_style(Clmp3Widget::Load, state)),
-        Span::styled("oad ", border_title_style(Clmp3Widget::Load, state)),
+        Span::styled("ocal ", border_title_style(Clmp3Widget::Load, state)),
         Span::raw(border.horizontal_top),
         Span::raw(border.horizontal_top),
         Span::styled(" o", border_title_first_style(Clmp3Widget::Online, state)),

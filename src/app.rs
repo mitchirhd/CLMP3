@@ -142,10 +142,8 @@ impl App {
 
             let result = match event {
                 Clmp3Event::KeyInput(key_event) => self.handle_key_event(key_event),
-                // Clmp3Event::MouseInput(mouse_event) => todo!(),
                 Clmp3Event::Redraw => self.app_state.player.update(),
                 Clmp3Event::NewSongStarted => self.load_current_pic(),
-                Clmp3Event::CurrentMetadataLoaded(source) => self.on_metadata_loaded(source),
                 Clmp3Event::CoverLoaded(source, dynamic_image) => {
                     self.on_cover_loaded(source, dynamic_image)
                 }
@@ -235,15 +233,6 @@ impl App {
                 .load_pic(metadata.source.clone());
         }
         self.main_widget.display_widget.update_state(None, None);
-        Ok(())
-    }
-
-    fn on_metadata_loaded(&mut self, loaded_source: Arc<SourceType>) -> Result<(), anyhow::Error> {
-        if let Some(current_source) = self.app_state.player.queue.peek()
-            && current_source.id() == loaded_source.id()
-        {
-            self.load_current_pic()?;
-        }
         Ok(())
     }
 

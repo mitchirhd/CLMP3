@@ -18,7 +18,6 @@ use crate::{
     enums::Clmp3Event,
     online_helper::OnlineHelper,
     source_builder::{SourceId, SourceType},
-    source_queue::SharedQueue,
 };
 
 #[derive(Clone)]
@@ -173,9 +172,8 @@ impl MetadataLoader {
     pub fn new(
         event_tx: Sender<Clmp3Event>,
         map: MetadataMap,
-        queue: SharedQueue,
     ) -> MetadataLoader {
-        let loader_jobs = Self::spawn_loader_thread(event_tx.clone(), map, queue);
+        let loader_jobs = Self::spawn_loader_thread(map);
         let pic_jobs = Self::spawn_pic_thread(event_tx);
 
         MetadataLoader {
@@ -185,9 +183,7 @@ impl MetadataLoader {
     }
 
     fn spawn_loader_thread(
-        event_tx: Sender<Clmp3Event>,
         map: MetadataMap,
-        queue: SharedQueue,
     ) -> mpsc::Sender<Arc<SourceType>> {
         let (jobs, inbox) = mpsc::channel::<Arc<SourceType>>();
 
@@ -200,11 +196,6 @@ impl MetadataLoader {
 
                 let mut map_write = map.write().unwrap();
                 map_write.insert(source.id(), Arc::new(metadata));
-                if let Some(playing_source) = queue.peek()
-                    && playing_source.id() == source.id()
-                {
-                    let _ = event_tx.send(Clmp3Event::CurrentMetadataLoaded(source));
-                }
             }
         });
         jobs

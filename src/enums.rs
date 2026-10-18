@@ -7,10 +7,8 @@ use crate::source_builder::SourceType;
 
 pub enum Clmp3Event {
     KeyInput(KeyEvent),
-    // MouseInput(MouseEvent),
     Redraw,
     NewSongStarted,
-    CurrentMetadataLoaded(Arc<SourceType>),
     CoverLoaded(Arc<SourceType>, Option<DynamicImage>),
 }
 

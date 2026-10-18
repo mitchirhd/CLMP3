@@ -8,9 +8,11 @@ use ratatui::{
     symbols::border,
     widgets::{Block, StatefulWidget, Widget},
 };
-use ratatui_textarea::{Input, Key, TextArea};
+use ratatui_textarea::{CursorMove, Input, Key, TextArea};
 
 use crate::{app_state::AppState, online_helper::OnlineHelper, widgets::traits::InputWidget};
+
+const TEXTAREA_PLACEHOLDER: [&str; 2] = ["links to content supported by yt-dlp", "one per line"];
 
 pub struct OnlineWidget {
     textarea: TextArea<'static>,
@@ -18,20 +20,29 @@ pub struct OnlineWidget {
 
 impl OnlineWidget {
     pub fn new() -> OnlineWidget {
-        OnlineWidget {
+        let mut val = OnlineWidget {
             textarea: TextArea::default(),
-        }
+        };
+        val.reset_textarea();
+        val
     }
 
     fn start_import(&self, state: &AppState) {
-        match self.textarea.lines().first() {
-            Some(url) => OnlineHelper::fetch_url(
-                state.player.queue.clone(),
-                state.metadata_loader.clone(),
-                url.clone(),
-            ),
-            None => {}
-        }
+        OnlineHelper::fetch_urls(
+            state.player.queue.clone(),
+            state.metadata_loader.clone(),
+            self.textarea.lines().to_vec(),
+        )
+    }
+
+    fn reset_textarea(&mut self) {
+        self.textarea.clear();
+        self.textarea.insert_str(TEXTAREA_PLACEHOLDER[0]);
+        self.textarea.insert_newline();
+        self.textarea.insert_str(TEXTAREA_PLACEHOLDER[1]);
+        self.textarea.insert_newline();
+        self.textarea.move_cursor(CursorMove::Bottom);
+        self.textarea.move_cursor(CursorMove::End);
     }
 }
 
@@ -63,13 +74,19 @@ impl InputWidget for OnlineWidget {
         state: &mut AppState,
     ) -> anyhow::Result<()> {
         match (key, state.all_input_to_widget) {
-            (KeyCode::Esc, _) => state.all_input_to_widget = false,
+            (KeyCode::Esc, _) => {
+                state.all_input_to_widget = false;
+                self.reset_textarea();
+            }
             (KeyCode::Right, true) => {
                 self.start_import(state);
                 state.all_input_to_widget = false;
+                self.reset_textarea();
+            }
+            (KeyCode::Enter, false) => {
+                state.all_input_to_widget = true;
                 self.textarea.clear();
             }
-            (KeyCode::Enter, false) => state.all_input_to_widget = true,
             (_, true) => {
                 self.textarea.input(Input {
                     key: Key::from(key),
