@@ -26,16 +26,17 @@ impl OnlineHelper {
     }
 
     fn fetch_url_internal(queue: &SharedQueue, loader: &Arc<MetadataLoader>, urls: Vec<String>) {
-        for mut url in urls {
-            url = url.trim().to_string();
-            if url.is_empty() {
-                continue;
-            }
+        let sources: Vec<Arc<SourceType>> = urls
+            .into_iter()
+            .map(|u| u.trim().to_string())
+            .filter(|u| !u.is_empty())
+            .map(|u| Arc::new(SourceType::Url(u)))
+            .collect();
 
-            let source = Arc::new(SourceType::Url(url));
+        for source in &sources {
             queue.enqueue(source.clone());
-            loader.load(source);
         }
+        loader.load_many(sources);
     }
 
     pub fn ytdlp_default_args() -> Vec<String> {
