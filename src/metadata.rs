@@ -1,8 +1,8 @@
 use std::{
     io::{BufRead, BufReader, Write},
     path::PathBuf,
-    process::{Command, Stdio},
-    sync::Arc,
+    process::{Child, Command, Stdio},
+    sync::{Arc, Mutex},
 };
 
 use image::DynamicImage;
@@ -11,6 +11,14 @@ use lofty::{
 };
 
 use crate::{online_helper::OnlineHelper, source_builder::SourceType};
+
+#[derive(Default)]
+pub struct LoaderSlot {
+    pub shutdown: bool,
+    pub ytdlp: Option<Child>,
+}
+
+pub type SharedLoaderSlot = Arc<Mutex<LoaderSlot>>;
 
 pub struct OnlineData {
     pub url: String,
@@ -67,7 +75,11 @@ impl Metadata {
         Metadata::new(title, artist, album, source, None)
     }
 
-    pub fn from_urls(urls: &[String], mut on_item: impl FnMut(OnlineData)) {
+    pub fn from_urls(
+        urls: &[String],
+        slot: &SharedLoaderSlot,
+        mut on_item: impl FnMut(OnlineData),
+    ) {
         let mut args = OnlineHelper::ytdlp_default_args();
         args.extend(
             [
@@ -93,13 +105,26 @@ impl Metadata {
             return;
         };
 
+        let stdin = yt_process.stdin.take();
+        let stdout = yt_process.stdout.take();
+
+        {
+            let mut s = slot.lock().unwrap();
+            if s.shutdown {
+                let _ = yt_process.kill();
+                let _ = yt_process.wait();
+                return;
+            }
+            s.ytdlp = Some(yt_process);
+        }
+
         // write all urls in stdin and close it
-        if let Some(mut stdin) = yt_process.stdin.take() {
+        if let Some(mut stdin) = stdin {
             let _ = stdin.write_all(urls.join("\n").as_bytes());
         }
 
         // save all data from stdout
-        if let Some(stdout) = yt_process.stdout.take() {
+        if let Some(stdout) = stdout {
             for line in BufReader::new(stdout).lines().map_while(Result::ok) {
                 let data: Vec<Option<String>> =
                     line.split('\t').map(Self::clean_ytdlp_str).collect();
@@ -116,7 +141,10 @@ impl Metadata {
                 });
             }
         }
-        let _ = yt_process.wait();
+        let child = slot.lock().unwrap().ytdlp.take();
+        if let Some(mut child) = child {
+            let _ = child.wait(); // reaps the process
+        }
     }
 
     fn clean_ytdlp_str(s: &str) -> Option<String> {

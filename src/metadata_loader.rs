@@ -9,35 +9,54 @@ use std::{
 
 use crate::{
     enums::Clmp3Event,
-    metadata::Metadata,
+    metadata::{Metadata, SharedLoaderSlot},
     source_builder::{SourceId, SourceType},
 };
 
 pub struct MetadataLoader {
     loader_jobs: mpsc::Sender<Vec<Arc<SourceType>>>,
     pic_jobs: mpsc::Sender<Arc<SourceType>>,
+    slot: SharedLoaderSlot,
+}
+
+impl Drop for MetadataLoader {
+    fn drop(&mut self) {
+        let mut s = self.slot.lock().unwrap();
+        s.shutdown = true;
+        if let Some(child) = &mut s.ytdlp {
+            let _ = child.kill();
+        }
+    }
 }
 
 pub type MetadataMap = Arc<RwLock<HashMap<SourceId, Arc<Metadata>>>>;
 
 impl MetadataLoader {
     pub fn new(event_tx: Sender<Clmp3Event>, map: MetadataMap) -> MetadataLoader {
-        let loader_jobs = Self::spawn_loader_thread(map.clone());
+        let slot = SharedLoaderSlot::default();
+        let loader_jobs = Self::spawn_loader_thread(map.clone(), slot.clone());
         let pic_jobs = Self::spawn_pic_thread(event_tx, map);
 
         MetadataLoader {
             loader_jobs,
             pic_jobs,
+            slot,
         }
     }
 
-    fn spawn_loader_thread(map: MetadataMap) -> mpsc::Sender<Vec<Arc<SourceType>>> {
+    fn spawn_loader_thread(
+        map: MetadataMap,
+        slot: SharedLoaderSlot,
+    ) -> mpsc::Sender<Vec<Arc<SourceType>>> {
         let (jobs, inbox) = mpsc::channel::<Vec<Arc<SourceType>>>();
 
         thread::spawn(move || {
             for batch in inbox {
+                if slot.lock().unwrap().shutdown {
+                    break;
+                }
                 let online_data = Self::handle_local_and_get_online_data(batch, &map);
-                Self::handle_online_sources(online_data, &map);
+                Self::handle_online_sources(online_data, &map, &slot);
             }
         });
         jobs
@@ -72,6 +91,7 @@ impl MetadataLoader {
     fn handle_online_sources(
         online_data: (Vec<String>, HashMap<String, Arc<SourceType>>),
         map: &MetadataMap,
+        slot: &SharedLoaderSlot,
     ) {
         let (urls, pending) = online_data;
 
@@ -79,7 +99,7 @@ impl MetadataLoader {
             return; // only local files were in this batch
         }
 
-        Metadata::from_urls(&urls, |data| {
+        Metadata::from_urls(&urls, slot, |data| {
             if let Some(source) = pending.get(&data.url) {
                 let meta = Metadata::new(
                     data.title.unwrap_or_else(|| source.fallback_label()),

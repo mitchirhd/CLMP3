@@ -2,9 +2,9 @@ use std::{
     fs::{self},
     io::Cursor,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::{Child, Command, Stdio},
     sync::{
-        Arc,
+        Arc, Mutex,
         mpsc::{self, Receiver, TryRecvError},
     },
     thread,
@@ -33,71 +33,6 @@ pub enum SourceType {
 }
 
 impl SourceType {
-    pub fn build(&self) -> anyhow::Result<Box<dyn Source<Item = f32> + Send>> {
-        match self {
-            SourceType::File(path) => Self::build_from_path(path),
-            SourceType::Url(url) => Self::build_from_url(url),
-        }
-    }
-
-    fn build_from_path(path: &PathBuf) -> anyhow::Result<Box<dyn Source<Item = f32> + Send>> {
-        let bytes =
-            fs::read(path).context("Could not open file, was it moved after adding to queue?")?;
-        let len = bytes.len() as u64;
-        let built = Decoder::builder()
-            .with_data(Cursor::new(bytes))
-            .with_byte_len(len)
-            .with_seekable(true)
-            .build()
-            .context("Could not decode audio")?;
-        Ok(Box::new(built))
-    }
-
-    fn build_from_url(url: &str) -> anyhow::Result<Box<dyn Source<Item = f32> + Send>> {
-        let mut args = OnlineHelper::ytdlp_default_args();
-        args.push(String::from("-q"));
-        args.push(String::from("-f"));
-        args.push(String::from("bestaudio/best"));
-        args.push(String::from("-o"));
-        args.push(String::from("-"));
-        args.push(String::from(url));
-        let mut ytdlp = Command::new("yt-dlp")
-            .args(args)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-            .context("failed to start yt-dlp (is it installed and on PATH?)")?;
-
-        let ytdlp_stdout = ytdlp
-            .stdout
-            .take()
-            .context("yt-dlp stdout was not captured")?;
-
-        let out = Command::new("ffmpeg")
-            .args(FFMPEG_ARGS)
-            .stdin(Stdio::from(ytdlp_stdout))
-            .stderr(Stdio::null())
-            .output()
-            .context("failed to run ffmpeg (is it installed and on PATH?)")?;
-
-        let ytdlp_status = ytdlp.wait().context("failed to wait for yt-dlp")?;
-        if !ytdlp_status.success() {
-            bail!("yt-dlp failed with {ytdlp_status}");
-        }
-        if !out.status.success() || out.stdout.is_empty() {
-            bail!("ffmpeg produced no audio ({})", out.status);
-        }
-
-        let len = out.stdout.len();
-        let built = Decoder::builder()
-            .with_data(Cursor::new(out.stdout))
-            .with_byte_len(len as u64)
-            .with_seekable(true)
-            .build()
-            .context("Could not decode audio")?;
-        Ok(Box::new(built))
-    }
-
     pub fn id(&self) -> SourceId {
         match self {
             SourceType::File(path) => SourceId::File(path.clone()),
@@ -112,7 +47,7 @@ impl SourceType {
         }
     }
 
-    pub fn file_name(path: &Path) -> String {
+    fn file_name(path: &Path) -> String {
         path.file_name()
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_default()
@@ -136,9 +71,28 @@ pub enum PollResult {
     Failed,
 }
 
+#[derive(Default)]
+struct Slot {
+    cancelled: bool,
+    ytdlp: Option<Child>,
+}
+
+type SharedSlot = Arc<Mutex<Slot>>;
+
 struct PendingSource {
-    pub source: Arc<SourceType>,
-    pub receiver: Receiver<BuildResult>, // dropping it discards the result of the build
+    source: Arc<SourceType>,
+    receiver: Receiver<BuildResult>, // dropping it discards the result of the build
+    slot: SharedSlot,
+}
+
+impl Drop for PendingSource {
+    fn drop(&mut self) {
+        let mut s = self.slot.lock().unwrap();
+        s.cancelled = true;
+        if let Some(child) = &mut s.ytdlp {
+            let _ = child.kill(); // wait() übernimmt der Build-Thread
+        }
+    }
 }
 
 pub struct SourceBuilder {
@@ -176,14 +130,107 @@ impl SourceBuilder {
 
     pub fn start_building(&mut self, source: Arc<SourceType>) {
         let (result_tx, result_rx) = mpsc::channel();
+        let slot = SharedSlot::default();
+
         let source_clone = source.clone();
+        let slot_clone = slot.clone();
         thread::spawn(move || {
-            let _ = result_tx.send(source_clone.build());
+            let _ = result_tx.send(Self::build(&source_clone, &slot_clone));
         });
 
         self.pending = Some(PendingSource {
             source,
             receiver: result_rx,
+            slot,
         });
+    }
+
+    fn build(
+        source: &SourceType,
+        slot: &SharedSlot,
+    ) -> anyhow::Result<Box<dyn Source<Item = f32> + Send>> {
+        match source {
+            SourceType::File(path) => Self::build_from_path(path),
+            SourceType::Url(url) => Self::build_from_url(url, slot),
+        }
+    }
+
+    fn build_from_path(path: &PathBuf) -> anyhow::Result<Box<dyn Source<Item = f32> + Send>> {
+        let bytes =
+            fs::read(path).context("Could not open file, was it moved after adding to queue?")?;
+        let len = bytes.len() as u64;
+        let built = Decoder::builder()
+            .with_data(Cursor::new(bytes))
+            .with_byte_len(len)
+            .with_seekable(true)
+            .build()
+            .context("Could not decode audio")?;
+        Ok(Box::new(built))
+    }
+
+    fn build_from_url(
+        url: &str,
+        slot: &SharedSlot,
+    ) -> anyhow::Result<Box<dyn Source<Item = f32> + Send>> {
+        let mut args = OnlineHelper::ytdlp_default_args();
+        args.push(String::from("-q"));
+        args.push(String::from("-f"));
+        args.push(String::from("bestaudio/best"));
+        args.push(String::from("-o"));
+        args.push(String::from("-"));
+        args.push(String::from(url));
+        let mut ytdlp = Command::new("yt-dlp")
+            .args(args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .context("failed to start yt-dlp (is it installed and on PATH?)")?;
+
+        let ytdlp_stdout = ytdlp
+            .stdout
+            .take()
+            .context("yt-dlp stdout was not captured")?;
+
+        {
+            let mut s = slot.lock().unwrap();
+            if s.cancelled {
+                let _ = ytdlp.kill();
+                let _ = ytdlp.wait();
+                bail!("build cancelled");
+            }
+            s.ytdlp = Some(ytdlp);
+        }
+
+        let ffmpeg_out = Command::new("ffmpeg")
+            .args(FFMPEG_ARGS)
+            .stdin(Stdio::from(ytdlp_stdout))
+            .stderr(Stdio::null())
+            .output()
+            .context("failed to run ffmpeg (is it installed and on PATH?)")?;
+
+        let (cancelled, ytdlp) = {
+            let mut s = slot.lock().unwrap();
+            (s.cancelled, s.ytdlp.take())
+        };
+
+        let ytdlp_status = ytdlp.context("failed to wait for yt-dlp")?.wait()?;
+        if cancelled {
+            bail!("build cancelled")
+        }
+        if !ytdlp_status.success() {
+            bail!("yt-dlp failed with {ytdlp_status}");
+        }
+        if !ffmpeg_out.status.success() || ffmpeg_out.stdout.is_empty() {
+            bail!("ffmpeg produced no audio ({})", ffmpeg_out.status);
+        }
+
+        let len = ffmpeg_out.stdout.len();
+        let built = Decoder::builder()
+            .with_data(Cursor::new(ffmpeg_out.stdout))
+            .with_byte_len(len as u64)
+            .with_seekable(true)
+            .build()
+            .context("Could not decode audio")?;
+        Ok(Box::new(built))
     }
 }
