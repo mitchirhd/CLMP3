@@ -8,9 +8,7 @@ use std::{
 };
 
 use crate::{
-    enums::Clmp3Event,
-    metadata::{Metadata, SharedLoaderSlot},
-    source_builder::{SourceId, SourceType},
+    enums::Clmp3Event, metadata::{Metadata, SharedLoaderSlot}, source_builder::{SourceId, SourceType}, source_queue::SharedQueue,
 };
 
 pub struct MetadataLoader {
@@ -32,9 +30,9 @@ impl Drop for MetadataLoader {
 pub type MetadataMap = Arc<RwLock<HashMap<SourceId, Arc<Metadata>>>>;
 
 impl MetadataLoader {
-    pub fn new(event_tx: Sender<Clmp3Event>, map: MetadataMap) -> MetadataLoader {
+    pub fn new(event_tx: Sender<Clmp3Event>, map: MetadataMap, queue: SharedQueue) -> MetadataLoader {
         let slot = SharedLoaderSlot::default();
-        let loader_jobs = Self::spawn_loader_thread(map.clone(), slot.clone());
+        let loader_jobs = Self::spawn_loader_thread(map.clone(), slot.clone(), event_tx.clone(), queue);
         let pic_jobs = Self::spawn_pic_thread(event_tx, map);
 
         MetadataLoader {
@@ -47,6 +45,8 @@ impl MetadataLoader {
     fn spawn_loader_thread(
         map: MetadataMap,
         slot: SharedLoaderSlot,
+        event_tx: Sender<Clmp3Event>,
+        queue: SharedQueue
     ) -> mpsc::Sender<Vec<Arc<SourceType>>> {
         let (jobs, inbox) = mpsc::channel::<Vec<Arc<SourceType>>>();
 
@@ -56,7 +56,7 @@ impl MetadataLoader {
                     break;
                 }
                 let online_data = Self::handle_local_and_get_online_data(batch, &map);
-                Self::handle_online_sources(online_data, &map, &slot);
+                Self::handle_online_sources(online_data, &map, &slot, &queue, event_tx.clone());
             }
         });
         jobs
@@ -92,6 +92,8 @@ impl MetadataLoader {
         online_data: (Vec<String>, HashMap<String, Arc<SourceType>>),
         map: &MetadataMap,
         slot: &SharedLoaderSlot,
+        queue: &SharedQueue,
+        event_tx: Sender<Clmp3Event>
     ) {
         let (urls, pending) = online_data;
 
@@ -109,6 +111,11 @@ impl MetadataLoader {
                     data.thumbnail_url,
                 );
                 map.write().unwrap().insert(source.id(), Arc::new(meta));
+                if let Some(playing_source) = queue.peek()
+                    && playing_source.id() == source.id()
+                {
+                    let _ = event_tx.send(Clmp3Event::NewSongStarted);
+                }
             }
         });
 
