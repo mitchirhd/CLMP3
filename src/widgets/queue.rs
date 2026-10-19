@@ -126,7 +126,9 @@ impl StatefulWidget for &mut QueueWidget {
         let max_index = self
             .queue_state
             .selected()
-            .map_or(prev_len.saturating_add(list_height), |s| s.saturating_add(list_height));
+            .map_or(prev_len.saturating_add(list_height), |s| {
+                s.saturating_add(list_height)
+            });
 
         let items: Vec<ListItem> = sources
             .into_iter()

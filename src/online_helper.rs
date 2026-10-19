@@ -5,7 +5,9 @@ use std::{
     thread,
 };
 
-use crate::{metadata::MetadataLoader, source_builder::SourceType, source_queue::SharedQueue};
+use crate::{
+    metadata_loader::MetadataLoader, source_builder::SourceType, source_queue::SharedQueue,
+};
 
 static BROWSER_FOR_COOKIES: OnceLock<String> = OnceLock::new();
 static COOKIES_PATH: OnceLock<String> = OnceLock::new();

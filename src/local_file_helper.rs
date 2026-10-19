@@ -1,7 +1,7 @@
 use std::{fs, path::Path, sync::Arc, thread};
 
 use crate::{
-    audio::AudioPlayer, metadata::MetadataLoader, source_builder::SourceType,
+    audio::AudioPlayer, metadata_loader::MetadataLoader, source_builder::SourceType,
     source_queue::SharedQueue,
 };
 

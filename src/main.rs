@@ -1,16 +1,17 @@
-mod app;
-mod enums;
-mod widgets;
+use crate::online_helper::OnlineHelper;
 use app::App;
 
-use crate::online_helper::OnlineHelper;
+mod app;
 mod app_state;
 mod audio;
+mod enums;
 mod local_file_helper;
 mod metadata;
+mod metadata_loader;
 mod online_helper;
 mod source_builder;
 mod source_queue;
+mod widgets;
 
 use clap::Parser;
 

@@ -7,7 +7,8 @@ use std::{
 use crate::{
     audio::AudioPlayer,
     enums::{Clmp3Error, Clmp3Event, Clmp3Widget, WidgetArea},
-    metadata::{Metadata, MetadataLoader, MetadataMap},
+    metadata::Metadata,
+    metadata_loader::{MetadataLoader, MetadataMap},
     source_builder::SourceType,
 };
 
