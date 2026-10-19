@@ -1,4 +1,6 @@
 use std::{
+    io::{BufRead, BufReader, Write},
+    process::{Command, Stdio},
     sync::{Arc, OnceLock},
     thread,
 };
@@ -26,10 +28,23 @@ impl OnlineHelper {
     }
 
     fn fetch_url_internal(queue: &SharedQueue, loader: &Arc<MetadataLoader>, urls: Vec<String>) {
-        let sources: Vec<Arc<SourceType>> = urls
+        let inputs: Vec<String> = urls
             .into_iter()
             .map(|u| u.trim().to_string())
             .filter(|u| !u.is_empty())
+            .collect();
+
+        if inputs.is_empty() {
+            return;
+        }
+
+        let mut expanded = Self::expand_urls(&inputs);
+        if expanded.is_empty() {
+            expanded = inputs;
+        }
+
+        let sources: Vec<Arc<SourceType>> = expanded
+            .into_iter()
             .map(|u| Arc::new(SourceType::Url(u)))
             .collect();
 
@@ -37,6 +52,48 @@ impl OnlineHelper {
             queue.enqueue(source.clone());
         }
         loader.load_many(sources);
+    }
+
+    fn expand_urls(inputs: &[String]) -> Vec<String> {
+        let mut args = Self::ytdlp_default_args();
+        args.extend(
+            [
+                "--flat-playlist",
+                "--no-playlist",
+                "--ignore-errors",
+                "-a",
+                "-",
+                "--print",
+                "%(webpage_url,url)s",
+            ]
+            .map(String::from),
+        );
+
+        let Ok(mut child) = Command::new("yt-dlp")
+            .args(args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+        else {
+            return Vec::new();
+        };
+
+        if let Some(mut stdin) = child.stdin.take() {
+            let _ = stdin.write_all(inputs.join("\n").as_bytes());
+        }
+
+        let mut result = Vec::new();
+        if let Some(stdout) = child.stdout.take() {
+            for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                let line = line.trim();
+                if !line.is_empty() && line != "NA" {
+                    result.push(line.to_string());
+                }
+            }
+        }
+        let _ = child.wait();
+        result
     }
 
     pub fn ytdlp_default_args() -> Vec<String> {
