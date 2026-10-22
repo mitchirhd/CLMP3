@@ -142,13 +142,13 @@ impl AudioPlayer {
 
         let curr_pos = self.player.get_pos();
         let mut scrub_pos = if backwards {
-            curr_pos - SCRUB_STEP_MILLIS
+            curr_pos.saturating_sub(SCRUB_STEP_MILLIS)
         } else {
-            curr_pos + SCRUB_STEP_MILLIS
+            curr_pos.saturating_add(SCRUB_STEP_MILLIS)
         };
 
         if let Some(total_dur) = self.total_duration {
-            scrub_pos = scrub_pos.clamp(Duration::ZERO, total_dur);
+            scrub_pos = scrub_pos.min(total_dur);
         }
         self.player
             .try_seek(scrub_pos)
