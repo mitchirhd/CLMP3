@@ -117,18 +117,19 @@ impl StatefulWidget for &mut QueueWidget {
         let prev_len = state.player.queue.prev_len();
 
         let list_height = area.height as usize;
-        let min_index = self
-            .queue_state
-            .selected()
-            .map_or(prev_len.saturating_sub(PREV_ENTRIES_SHOWN), |s| {
-                s.saturating_sub(list_height)
-            });
-        let max_index = self
-            .queue_state
-            .selected()
-            .map_or(prev_len.saturating_add(list_height), |s| {
-                s.saturating_add(list_height)
-            });
+
+        let len = state.player.queue.len();
+
+        let offset = self.queue_state.offset();
+
+        let start = match self.queue_state.selected() {
+            Some(sel) if sel < offset => sel,
+            Some(sel) if sel >= offset + list_height => sel + 1 - list_height,
+            _ => offset,
+        };
+
+        let min_index = start.min(len);
+        let max_index = (start + list_height).min(len);
 
         let items: Vec<ListItem> = sources
             .into_iter()

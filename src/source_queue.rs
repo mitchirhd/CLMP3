@@ -147,6 +147,10 @@ impl SourceQueue {
             contents.upcoming.remove(index - prev_len);
         }
     }
+
+    fn upcoming_len(&self) -> usize {
+        self.lock().upcoming.len()
+    }
 }
 
 #[derive(Clone)]
@@ -203,5 +207,9 @@ impl SharedQueue {
 
     pub fn delete_at(&self, index: usize) {
         self.inner.delete_at(index);
+    }
+
+    pub fn len(&self) -> usize {
+        self.inner.prev_len() + self.inner.upcoming_len()
     }
 }
