@@ -1,4 +1,4 @@
-use std::cmp::Ordering;
+use std::{cmp::Ordering, sync::Arc};
 
 use anyhow::Ok;
 use crossterm::event::{KeyCode, KeyModifiers};
@@ -112,7 +112,7 @@ impl StatefulWidget for &mut QueueWidget {
         buf: &mut ratatui::prelude::Buffer,
         state: &mut AppState,
     ) {
-        let map = state.metadata_map.read().unwrap();
+        let map = &state.metadata_map;
         let sources = state.player.queue.snapshot();
         let prev_len = state.player.queue.prev_len();
 
@@ -140,7 +140,7 @@ impl StatefulWidget for &mut QueueWidget {
                 }
 
                 let metadata = map.get(&source.id());
-                let label = label(&source, metadata.map(|m| m.as_ref()));
+                let label = label(&source, metadata);
 
                 let style = if let Some(selected) = &self.selected_indexes
                     && selected.contains(&i)
@@ -176,7 +176,7 @@ impl StatefulWidget for &mut QueueWidget {
     }
 }
 
-fn label(source: &SourceType, metadata: Option<&Metadata>) -> String {
+fn label(source: &SourceType, metadata: Option<Arc<Metadata>>) -> String {
     match metadata {
         Some(m) => {
             let mut label_vec = vec![m.title.to_string()];

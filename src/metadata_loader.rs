@@ -8,7 +8,10 @@ use std::{
 };
 
 use crate::{
-    enums::Clmp3Event, metadata::{Metadata, SharedLoaderSlot}, source_builder::{SourceId, SourceType}, source_queue::SharedQueue,
+    enums::Clmp3Event,
+    metadata::{Metadata, SharedLoaderSlot},
+    source_builder::{SourceId, SourceType},
+    source_queue::SharedQueue,
 };
 
 pub struct MetadataLoader {
@@ -27,12 +30,46 @@ impl Drop for MetadataLoader {
     }
 }
 
-pub type MetadataMap = Arc<RwLock<HashMap<SourceId, Arc<Metadata>>>>;
+pub type MetadataMapInternal = Arc<RwLock<HashMap<SourceId, Arc<Metadata>>>>;
+
+#[derive(Clone)]
+pub struct MetadataMap {
+    inner: MetadataMapInternal,
+}
+
+impl MetadataMap {
+    pub fn new() -> MetadataMap {
+        MetadataMap {
+            inner: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    pub fn contains_key(&self, key: &SourceId) -> bool {
+        self.inner.read().unwrap().contains_key(key)
+    }
+
+    pub fn insert(&self, key: SourceId, val: Arc<Metadata>) {
+        self.inner.write().unwrap().insert(key, val);
+    }
+
+    pub fn get(&self, key: &SourceId) -> Option<Arc<Metadata>> {
+        self.inner.read().unwrap().get(key).cloned()
+    }
+
+    pub fn clear(&self) {
+        self.inner.write().unwrap().clear();
+    }
+}
 
 impl MetadataLoader {
-    pub fn new(event_tx: Sender<Clmp3Event>, map: MetadataMap, queue: SharedQueue) -> MetadataLoader {
+    pub fn new(
+        event_tx: Sender<Clmp3Event>,
+        map: MetadataMap,
+        queue: SharedQueue,
+    ) -> MetadataLoader {
         let slot = SharedLoaderSlot::default();
-        let loader_jobs = Self::spawn_loader_thread(map.clone(), slot.clone(), event_tx.clone(), queue);
+        let loader_jobs =
+            Self::spawn_loader_thread(map.clone(), slot.clone(), event_tx.clone(), queue);
         let pic_jobs = Self::spawn_pic_thread(event_tx, map);
 
         MetadataLoader {
@@ -46,7 +83,7 @@ impl MetadataLoader {
         map: MetadataMap,
         slot: SharedLoaderSlot,
         event_tx: Sender<Clmp3Event>,
-        queue: SharedQueue
+        queue: SharedQueue,
     ) -> mpsc::Sender<Vec<Arc<SourceType>>> {
         let (jobs, inbox) = mpsc::channel::<Vec<Arc<SourceType>>>();
 
@@ -70,13 +107,13 @@ impl MetadataLoader {
         let mut pending: HashMap<String, Arc<SourceType>> = HashMap::new(); // need to remember which source belongs to which url
 
         for source in batch {
-            if map.read().unwrap().contains_key(&source.id()) {
+            if map.contains_key(&source.id()) {
                 continue;
             }
             match &*source {
                 SourceType::File(path_buf) => {
                     let m = Metadata::from_file(source.clone(), path_buf);
-                    map.write().unwrap().insert(source.id(), Arc::new(m));
+                    map.insert(source.id(), Arc::new(m));
                 }
                 SourceType::Url(url) => {
                     if pending.insert(url.clone(), source.clone()).is_none() {
@@ -93,7 +130,7 @@ impl MetadataLoader {
         map: &MetadataMap,
         slot: &SharedLoaderSlot,
         queue: &SharedQueue,
-        event_tx: Sender<Clmp3Event>
+        event_tx: Sender<Clmp3Event>,
     ) {
         let (urls, pending) = online_data;
 
@@ -110,7 +147,7 @@ impl MetadataLoader {
                     source.clone(),
                     data.thumbnail_url,
                 );
-                map.write().unwrap().insert(source.id(), Arc::new(meta));
+                map.insert(source.id(), Arc::new(meta));
                 if let Some(playing_source) = queue.peek()
                     && playing_source.id() == source.id()
                 {
@@ -122,10 +159,10 @@ impl MetadataLoader {
         // online sources that didn't get added to map yet need to use fallback data
         for url in &urls {
             let source = &pending[url];
-            let missing = !map.read().unwrap().contains_key(&source.id());
+            let missing = !map.contains_key(&source.id());
             if missing {
                 let meta = Metadata::new(source.fallback_label(), None, None, source.clone(), None);
-                map.write().unwrap().insert(source.id(), Arc::new(meta));
+                map.insert(source.id(), Arc::new(meta));
             }
         }
     }
@@ -145,11 +182,7 @@ impl MetadataLoader {
                 let img = match &*source.clone() {
                     SourceType::File(path_buf) => Metadata::pic_from_file(path_buf),
                     SourceType::Url(url) => {
-                        let thumb = map
-                            .read()
-                            .unwrap()
-                            .get(&source.id())
-                            .and_then(|m| m.thumbnail_url.clone());
+                        let thumb = map.get(&source.id()).and_then(|m| m.thumbnail_url.clone());
                         Metadata::pic_from_url(url, thumb)
                     }
                 };

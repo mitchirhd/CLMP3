@@ -1,6 +1,5 @@
 use std::{
-    collections::HashMap,
-    sync::{Arc, RwLock, mpsc::Sender},
+    sync::{Arc, mpsc::Sender},
     time::Instant,
 };
 
@@ -29,7 +28,7 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(event_tx: Sender<Clmp3Event>, player: AudioPlayer) -> AppState {
-        let metadata_map = Arc::new(RwLock::new(HashMap::new()));
+        let metadata_map = MetadataMap::new();
         let queue = player.queue.clone();
         AppState {
             player,
@@ -89,11 +88,11 @@ impl AppState {
 
     pub fn metadata(&self, source: &SourceType) -> Option<Arc<Metadata>> {
         let id = source.id();
-        self.metadata_map.read().unwrap().get(&id).cloned()
+        self.metadata_map.get(&id)
     }
 
     pub fn clear_all_metadata(&self) {
-        self.metadata_map.write().unwrap().clear();
+        self.metadata_map.clear();
     }
 
     pub fn current_metadata(&self) -> Option<Arc<Metadata>> {
