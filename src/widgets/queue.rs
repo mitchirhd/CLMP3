@@ -112,17 +112,22 @@ impl StatefulWidget for &mut QueueWidget {
         buf: &mut ratatui::prelude::Buffer,
         state: &mut AppState,
     ) {
-        let map = &state.metadata_map;
+        let map = &state.metadata_map.get_read_lock();
         let sources = state.player.queue.snapshot();
         let prev_len = state.player.queue.prev_len();
 
-        let list_height = area.height as usize;
+        let list_height = area.height as usize - 2;
 
         let len = state.player.queue.len();
 
         let offset = self.queue_state.offset();
 
-        let start = match self.queue_state.selected() {
+        let selected = self
+            .queue_state
+            .selected()
+            .map(|s| s.min(len.saturating_sub(1)));
+
+        let start = match selected {
             Some(sel) if sel < offset => sel,
             Some(sel) if sel >= offset + list_height => sel + 1 - list_height,
             _ => offset,
@@ -135,11 +140,14 @@ impl StatefulWidget for &mut QueueWidget {
             .into_iter()
             .enumerate()
             .map(|(i, source)| {
-                if i < min_index || max_index < i {
+                if i < min_index || i >= max_index {
                     return ListItem::new("");
                 }
 
                 let metadata = map.get(&source.id());
+                if metadata.is_none() {
+                    state.metadata_loader.add(source.clone());
+                }
                 let label = label(&source, metadata);
 
                 let style = if let Some(selected) = &self.selected_indexes
@@ -176,7 +184,7 @@ impl StatefulWidget for &mut QueueWidget {
     }
 }
 
-fn label(source: &SourceType, metadata: Option<Arc<Metadata>>) -> String {
+fn label(source: &SourceType, metadata: Option<&Arc<Metadata>>) -> String {
     match metadata {
         Some(m) => {
             let mut label_vec = vec![m.title.to_string()];

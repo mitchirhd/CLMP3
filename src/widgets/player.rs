@@ -77,6 +77,12 @@ impl StatefulWidget for &PlayerWidget {
             .constraints([Constraint::Fill(2), Constraint::Fill(1)])
             .areas(rest_area);
 
+        let metadata = state.current_metadata();
+        if metadata.is_none()
+            && let Some(source) = state.player.queue.peek()
+        {
+            state.metadata_loader.add_front(source);
+        }
         render_song_infos(title_area, buf, state.current_metadata());
         render_progress_bar(progress_area, buf, state);
         self.render_volume(volume_area, buf, state);

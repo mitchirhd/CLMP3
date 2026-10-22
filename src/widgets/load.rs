@@ -43,21 +43,13 @@ impl LoadWidget {
         let current = self.file_explorer.current();
         if current.is_dir {
             if modifier == KeyModifiers::SHIFT {
-                LocalFileHelper::load_dir(
-                    state.player.queue.clone(),
-                    state.metadata_loader.clone(),
-                    &current.path.clone(),
-                );
+                LocalFileHelper::load_dir(state.player.queue.clone(), &current.path.clone());
                 Input::None
             } else {
                 Input::Right
             }
         } else {
-            LocalFileHelper::load_file(
-                state.player.queue.clone(),
-                state.metadata_loader.clone(),
-                &current.path.clone(),
-            );
+            LocalFileHelper::load_file(state.player.queue.clone(), &current.path.clone());
             Input::None
         }
     }

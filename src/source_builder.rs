@@ -26,7 +26,7 @@ const FFMPEG_ARGS: [&str; 8] = [
     "pipe:1",
 ];
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum SourceType {
     File(PathBuf),
     Url(String),

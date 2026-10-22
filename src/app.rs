@@ -142,7 +142,7 @@ impl App {
 
             let result = match event {
                 Clmp3Event::KeyInput(key_event) => self.handle_key_event(key_event),
-                Clmp3Event::Redraw => self.app_state.player.update(),
+                Clmp3Event::Redraw => self.on_update(),
                 Clmp3Event::NewSongStarted => self.load_current_pic(),
                 Clmp3Event::CoverLoaded(source, dynamic_image) => {
                     self.on_cover_loaded(source, dynamic_image)
@@ -251,6 +251,12 @@ impl App {
             .display_widget
             .update_state(dynamic_image, Some(source.id()));
 
+        Ok(())
+    }
+
+    fn on_update(&mut self) -> Result<(), anyhow::Error> {
+        self.app_state.player.update()?;
+        self.app_state.metadata_loader.start_load();
         Ok(())
     }
 }

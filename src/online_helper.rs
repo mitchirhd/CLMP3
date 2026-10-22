@@ -5,9 +5,7 @@ use std::{
     thread,
 };
 
-use crate::{
-    metadata_loader::MetadataLoader, source_builder::SourceType, source_queue::SharedQueue,
-};
+use crate::{source_builder::SourceType, source_queue::SharedQueue};
 
 static BROWSER_FOR_COOKIES: OnceLock<String> = OnceLock::new();
 static COOKIES_PATH: OnceLock<String> = OnceLock::new();
@@ -23,13 +21,13 @@ impl OnlineHelper {
         let _ = COOKIES_PATH.set(path);
     }
 
-    pub fn fetch_urls(queue: SharedQueue, loader: Arc<MetadataLoader>, urls: Vec<String>) {
+    pub fn fetch_urls(queue: SharedQueue, urls: Vec<String>) {
         thread::spawn(move || {
-            Self::fetch_url_internal(&queue, &loader, urls);
+            Self::fetch_url_internal(&queue, urls);
         });
     }
 
-    fn fetch_url_internal(queue: &SharedQueue, loader: &Arc<MetadataLoader>, urls: Vec<String>) {
+    fn fetch_url_internal(queue: &SharedQueue, urls: Vec<String>) {
         let inputs: Vec<String> = urls
             .into_iter()
             .map(|u| u.trim().to_string())
@@ -40,9 +38,9 @@ impl OnlineHelper {
             return;
         }
 
-        let mut expanded = Self::expand_urls(&inputs);
+        let expanded = Self::expand_urls(&inputs);
         if expanded.is_empty() {
-            expanded = inputs;
+            return;
         }
 
         let sources: Vec<Arc<SourceType>> = expanded
@@ -53,7 +51,6 @@ impl OnlineHelper {
         for source in &sources {
             queue.enqueue(source.clone());
         }
-        loader.load_many(sources);
     }
 
     fn expand_urls(inputs: &[String]) -> Vec<String> {
@@ -67,6 +64,8 @@ impl OnlineHelper {
                 "-",
                 "--print",
                 "%(webpage_url,url)s",
+                "--match-filter",
+                r"title!~=^\[(Private|Deleted) video\]$",
             ]
             .map(String::from),
         );

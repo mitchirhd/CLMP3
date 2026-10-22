@@ -28,11 +28,7 @@ impl OnlineWidget {
     }
 
     fn start_import(&self, state: &AppState) {
-        OnlineHelper::fetch_urls(
-            state.player.queue.clone(),
-            state.metadata_loader.clone(),
-            self.textarea.lines().to_vec(),
-        )
+        OnlineHelper::fetch_urls(state.player.queue.clone(), self.textarea.lines().to_vec())
     }
 
     fn reset_textarea(&mut self) {
